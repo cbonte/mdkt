@@ -26,6 +26,7 @@ code is non-zero.
 | Tables | column widths fitted to the line, cells wrapped | `--table-overflow wrap`, `truncate` |
 | Headings | `#` markers kept | `--no-heading-marker` |
 | Front matter | YAML or TOML metadata block hidden | `--front-matter show` |
+| Pager | off; `-p` sends the output to `MDKT_PAGER`, `PAGER`, else `less -R -F` | `-p`, `--pager` |
 
 Continuation lines inside lists and block quotes stay aligned under the item text in both
 soft-break modes.
@@ -42,6 +43,14 @@ HTML is rendered the way GitHub displays it, for the tags GitHub keeps: `b`, `st
 `h1` to `h6`, `blockquote`, `ul`, `ol`, `li`, `details`, `summary`, `table`, `pre`, `hr`.
 Comments, `script` and `style` are dropped, entities are decoded, other tags are ignored and
 their text kept. `align` attributes are honoured on table cells only.
+
+## Shell integration
+
+```
+mdkt --completions bash > ~/.local/share/bash-completion/completions/mdkt
+mdkt --completions zsh > ~/.local/share/zsh/site-functions/_mdkt
+mdkt --man > mdkt.1
+```
 
 ## Build
 

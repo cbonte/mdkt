@@ -87,6 +87,10 @@ pub struct Args {
     /// Hide the file name header printed when several files are rendered.
     #[arg(long)]
     pub no_header: bool,
+
+    /// Send the output to a pager; the command comes from MDKT_PAGER or PAGER.
+    #[arg(short, long)]
+    pub pager: bool,
 }
 
 /// Combines CLI flags with terminal capabilities into concrete options.
@@ -100,7 +104,8 @@ pub fn resolve(cli: &Args, probe: &Probe) -> RenderOptions {
         ColorMode::Never => ColorLevel::None,
         ColorMode::Always => probe.color.max(ColorLevel::Ansi16),
         ColorMode::Auto if probe.no_color => ColorLevel::None,
-        ColorMode::Auto if probe.is_tty => probe.color,
+        // The pager writes to the terminal even though our own stdout is a pipe.
+        ColorMode::Auto if probe.is_tty || (cli.pager && probe.stderr_is_tty) => probe.color,
         // Piped into a pager from an interactive shell: keep colours for `less -R`.
         ColorMode::Auto if probe.stdout_is_pipe && probe.stderr_is_tty => probe.color,
         ColorMode::Auto => ColorLevel::None,
@@ -196,6 +201,16 @@ mod tests {
         let mut p = probe(true);
         p.no_color = true;
         assert_eq!(resolve(&cli(&[]), &p).color, ColorLevel::None);
+    }
+
+    #[test]
+    fn pager_keeps_colour_when_stdout_is_not_a_terminal() {
+        let mut p = probe(false);
+        p.stderr_is_tty = true;
+        assert_eq!(resolve(&cli(&[]), &p).color, ColorLevel::None);
+        assert_eq!(resolve(&cli(&["--pager"]), &p).color, ColorLevel::TrueColor);
+        p.stderr_is_tty = false;
+        assert_eq!(resolve(&cli(&["--pager"]), &p).color, ColorLevel::None);
     }
 
     #[test]

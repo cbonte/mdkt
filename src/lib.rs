@@ -8,6 +8,7 @@ pub mod html;
 pub mod layout;
 pub mod model;
 pub mod options;
+pub mod pager;
 pub mod parse;
 pub mod style;
 pub mod table;

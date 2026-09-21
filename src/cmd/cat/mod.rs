@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 
 use crate::RenderOptions;
 use crate::cli_extras::is_broken_pipe;
+use crate::pager;
 use crate::term::Probe;
 
 mod args;
@@ -34,29 +35,19 @@ fn render_one(path: &Path, header: bool, opts: &RenderOptions, out: &mut dyn Wri
     crate::render(&text, opts, out)
 }
 
-/// Renders every file; returns the number of files that failed.
-fn render_files(cli: &Args) -> Result<usize> {
-    if cli.list_themes {
-        let mut out = io::stdout().lock();
-        for name in crate::highlight::theme_names() {
-            writeln!(out, "{name}")?;
-        }
-        return Ok(0);
-    }
-    let opts = resolve(cli, &Probe::from_env());
-    let files: Vec<&Path> = if cli.files.is_empty() {
-        vec![Path::new("-")]
-    } else {
-        cli.files.iter().map(|p| p.as_path()).collect()
-    };
-    let header = files.len() > 1 && !cli.no_header;
-    let mut out = io::BufWriter::new(io::stdout().lock());
+/// Renders every file into `out`; returns the number of files that failed.
+fn render_all(
+    files: &[&Path],
+    header: bool,
+    opts: &RenderOptions,
+    out: &mut dyn Write,
+) -> Result<usize> {
     let mut failures = 0;
     for (i, path) in files.iter().enumerate() {
         if i > 0 {
             out.write_all(b"\n")?;
         }
-        if let Err(e) = render_one(path, header, &opts, &mut out) {
+        if let Err(e) = render_one(path, header, opts, out) {
             if is_broken_pipe(&e) {
                 return Err(e);
             }
@@ -67,6 +58,49 @@ fn render_files(cli: &Args) -> Result<usize> {
     }
     out.flush()?;
     Ok(failures)
+}
+
+/// Renders every file; returns the number of files that failed.
+fn render_files(cli: &Args) -> Result<usize> {
+    if cli.list_themes {
+        let mut out = io::stdout().lock();
+        for name in crate::highlight::theme_names() {
+            writeln!(out, "{name}")?;
+        }
+        return Ok(0);
+    }
+    let probe = Probe::from_env();
+    let opts = resolve(cli, &probe);
+    let files: Vec<&Path> = if cli.files.is_empty() {
+        vec![Path::new("-")]
+    } else {
+        cli.files.iter().map(|p| p.as_path()).collect()
+    };
+    let header = files.len() > 1 && !cli.no_header;
+    let child = if cli.pager && probe.stderr_is_tty {
+        match pager::spawn(pager::from_env().as_deref()) {
+            Ok(child) => Some(child),
+            Err(e) => {
+                eprintln!("mdkt cat: cannot start the pager: {e}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+    let Some(mut child) = child else {
+        let mut out = io::BufWriter::new(io::stdout().lock());
+        return render_all(&files, header, &opts, &mut out);
+    };
+    let mut pipe = io::BufWriter::new(child.stdin.take().expect("piped stdin"));
+    let failures = render_all(&files, header, &opts, &mut pipe);
+    drop(pipe);
+    child.wait()?;
+    // The reader quitting early is not a failure.
+    match failures {
+        Err(e) if is_broken_pipe(&e) => Ok(0),
+        other => other,
+    }
 }
 
 /// Runs `mdkt cat`; the exit code is a failure when a file could not be rendered.

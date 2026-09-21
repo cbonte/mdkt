@@ -24,6 +24,14 @@ fn run(args: &[&str], stdin: &str, env: &[(&str, &str)]) -> Output {
     child.wait_with_output().unwrap()
 }
 
+/// Runs `mdkt` without a subcommand.
+fn top(args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_mdkt"))
+        .args(args)
+        .output()
+        .expect("spawn mdkt")
+}
+
 fn stdout(o: &Output) -> String {
     String::from_utf8(o.stdout.clone()).unwrap()
 }
@@ -125,4 +133,25 @@ fn several_files_get_headers_and_failures_do_not_stop_the_run() {
     let o = run(&["-w", "20", "--no-header", args[0], args[2]], "", &[]);
     assert_eq!(stdout(&o), "# A\n\n# B\n");
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn completions_and_man_page() {
+    let o = top(&["--completions", "bash"]);
+    assert!(o.status.success());
+    assert!(stdout(&o).contains("mdkt"));
+    let o = top(&["--man"]);
+    assert!(o.status.success());
+    let man = stdout(&o);
+    assert!(man.contains("\n.TH mdkt 1"), "{:?}", &man[..60]);
+    assert!(man.contains("\n.TH mdkt-cat 1"));
+    assert!(man.contains("soft\\-breaks"));
+}
+
+#[test]
+fn pager_flag_is_ignored_without_a_terminal() {
+    let md = "# Title\n";
+    let plain = stdout(&run(&["-w", "20"], md, &[]));
+    let paged = stdout(&run(&["-w", "20", "--pager"], md, &[("PAGER", "false")]));
+    assert_eq!(paged, plain);
 }

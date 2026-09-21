@@ -1,8 +1,9 @@
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::Shell;
 
-use mdkt::cli_extras::is_broken_pipe;
+use mdkt::cli_extras::{self, is_broken_pipe};
 use mdkt::cmd::cat;
 
 /// Markdown tools for the terminal.
@@ -11,6 +12,14 @@ use mdkt::cmd::cat;
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
+
+    /// Print a completion script for the given shell and exit.
+    #[arg(long, value_enum, value_name = "SHELL", hide_short_help = true)]
+    completions: Option<Shell>,
+
+    /// Print the manual, one roff page per command, and exit.
+    #[arg(long, hide_short_help = true)]
+    man: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -27,6 +36,14 @@ fn dispatch(command: Command) -> (&'static str, anyhow::Result<ExitCode>) {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    match cli_extras::handle(&mut Cli::command(), cli.completions, cli.man) {
+        Ok(true) => return ExitCode::SUCCESS,
+        Ok(false) => {}
+        Err(e) => {
+            eprintln!("mdkt: {e}");
+            return ExitCode::FAILURE;
+        }
+    }
     let Some(command) = cli.command else {
         return ExitCode::SUCCESS;
     };
