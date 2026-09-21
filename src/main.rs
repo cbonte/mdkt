@@ -4,7 +4,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 
 use mdkt::cli_extras::{self, is_broken_pipe};
-use mdkt::cmd::{cat, toc};
+use mdkt::cmd::{cat, lint, toc};
 
 /// Markdown tools for the terminal.
 #[derive(Parser, Debug)]
@@ -28,12 +28,15 @@ enum Command {
     Cat(cat::Args),
     /// Insert or refresh a table of contents in a Markdown file.
     Toc(toc::Args),
+    /// Check Markdown links, anchors and heading structure.
+    Lint(lint::Args),
 }
 
 fn dispatch(command: Command) -> (&'static str, anyhow::Result<ExitCode>) {
     match command {
         Command::Cat(args) => ("cat", cat::run(&args)),
         Command::Toc(args) => ("toc", toc::run(&args)),
+        Command::Lint(args) => ("lint", lint::run(&args)),
     }
 }
 
