@@ -11,10 +11,12 @@ pub mod options;
 pub mod pager;
 pub mod parse;
 pub mod slug;
+pub mod source;
 pub mod style;
 pub mod table;
 pub mod term;
 pub mod toc;
+pub mod tree;
 pub mod wrap;
 
 use std::io::Write;
