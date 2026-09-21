@@ -111,14 +111,18 @@ pub fn parse(src: &str) -> Node<'_> {
     let mut stack = vec![Node::new(Kind::Document, 0..src.len())];
     for (event, range) in Parser::new_ext(src, parser_options()).into_offset_iter() {
         match event {
-            Event::Start(tag) => {
-                // An inline event arriving in a block container opens a tight paragraph.
-                if block_kind(tag.clone()).is_none() {
-                    open_implicit(&mut stack, range.start);
+            Event::Start(tag) => match block_kind(tag.clone()) {
+                // A block tag closes the tight paragraph a previous inline event opened.
+                Some(kind) => {
+                    close_implicit(&mut stack);
+                    stack.push(Node::new(kind, range));
                 }
-                let kind = block_kind(tag.clone()).unwrap_or(Kind::Inline(tag));
-                stack.push(Node::new(kind, range));
-            }
+                // An inline event arriving in a block container opens a tight paragraph.
+                None => {
+                    open_implicit(&mut stack, range.start);
+                    stack.push(Node::new(Kind::Inline(tag), range));
+                }
+            },
             Event::End(tag) => {
                 if matches!(
                     tag,
@@ -341,6 +345,23 @@ mod tests {
         assert!(
             !covered.iter().any(|r| r.contains(&def_at)),
             "the definition at {def_at} is inside {covered:?}"
+        );
+    }
+
+    #[test]
+    fn a_nested_list_leaves_the_tight_paragraph() {
+        let tree = parse("- one\n  - nested\n");
+        let Kind::List { .. } = tree.children[0].kind else {
+            panic!()
+        };
+        let item = &tree.children[0].children[0];
+        let kinds: Vec<&Kind<'_>> = item.children.iter().map(|c| &c.kind).collect();
+        assert!(
+            matches!(
+                kinds.as_slice(),
+                [Kind::Paragraph { implicit: true }, Kind::List { .. }]
+            ),
+            "{kinds:?}"
         );
     }
 
