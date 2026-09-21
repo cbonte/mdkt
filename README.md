@@ -46,3 +46,7 @@ cargo clippy --all-targets
 
 `UPDATE_FIXTURES=1 cargo test` rewrites the expected outputs under `tests/fixtures` after an
 intentional change.
+
+## Licence
+
+Dual licensed under [MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE), at your option.
