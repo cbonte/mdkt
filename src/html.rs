@@ -430,7 +430,7 @@ impl<'t> Converter<'t> {
         let frame = self.frames.pop().expect("len >= 2");
         match frame {
             Frame::Root(_) => {}
-            Frame::Quote(blocks) => self.push_block(Block::BlockQuote(blocks)),
+            Frame::Quote(blocks) => self.push_block(Block::BlockQuote { kind: None, blocks }),
             Frame::List { start, items } => self.push_block(Block::List {
                 start,
                 tight: true,
@@ -681,10 +681,10 @@ impl<'t> Converter<'t> {
     fn block(&mut self, block: Block) {
         match block {
             Block::Html(source) => self.html(&source),
-            Block::BlockQuote(inner) => {
+            Block::BlockQuote { kind, blocks } => {
                 self.flush_inline();
-                let inner = expand(inner, self.theme, self.links);
-                self.push_block(Block::BlockQuote(inner));
+                let blocks = expand(blocks, self.theme, self.links);
+                self.push_block(Block::BlockQuote { kind, blocks });
             }
             Block::List {
                 start,
@@ -786,7 +786,7 @@ mod tests {
     fn blocks(md: &str) -> Vec<Block> {
         let theme = Theme::default();
         let parsed = crate::parse::parse(md, &theme, LinkMode::Inline);
-        expand(parsed, &theme, LinkMode::Inline)
+        expand(parsed.blocks, &theme, LinkMode::Inline)
     }
 
     #[test]

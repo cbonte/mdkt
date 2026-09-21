@@ -25,13 +25,17 @@ code is non-zero.
 | Code blocks | syntax highlighted (syntect), tabs expanded | `--theme NAME`, `--list-themes`, `--tab-width N` |
 | Tables | column widths fitted to the line, cells wrapped | `--table-overflow wrap`, `truncate` |
 | Headings | `#` markers kept | `--no-heading-marker` |
+| Front matter | YAML or TOML metadata block hidden | `--front-matter show` |
 
 Continuation lines inside lists and block quotes stay aligned under the item text in both
 soft-break modes.
 
 Supported: headings, paragraphs, emphasis, strong, strikethrough, inline code, block quotes,
-ordered and unordered lists, task lists, fenced and indented code blocks, GFM tables, thematic
-breaks, hard breaks, links, images (alt text and URL).
+GitHub alerts, ordered and unordered lists, task lists, fenced and indented code blocks, GFM
+tables, thematic breaks, hard breaks, links, images (alt text and URL), footnotes.
+
+Footnote references are numbered in order of first appearance; the bodies are printed as a
+numbered list under a rule at the end of the document.
 
 HTML is rendered the way GitHub displays it, for the tags GitHub keeps: `b`, `strong`, `i`,
 `em`, `u`, `s`, `del`, `code`, `kbd`, `sub`, `sup`, `br`, `a`, `img`, `p`, `div`, `center`,

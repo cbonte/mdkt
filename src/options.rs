@@ -15,6 +15,14 @@ pub enum LinkMode {
     None,
 }
 
+/// Whether a metadata block at the top of the document is shown.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, clap::ValueEnum)]
+pub enum FrontMatter {
+    #[default]
+    Hide,
+    Show,
+}
+
 /// What to do with table cells wider than their column.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, clap::ValueEnum)]
 pub enum TableOverflow {
@@ -91,6 +99,7 @@ pub struct RenderOptions {
     pub table_overflow: TableOverflow,
     /// Show `#` markers before heading text.
     pub heading_marker: bool,
+    pub front_matter: FrontMatter,
 }
 
 impl RenderOptions {
@@ -110,6 +119,7 @@ impl RenderOptions {
             table_padding: defaults::TABLE_PADDING,
             table_overflow: TableOverflow::Wrap,
             heading_marker: true,
+            front_matter: FrontMatter::Hide,
         }
     }
 }

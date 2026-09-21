@@ -37,6 +37,57 @@ pub enum Atom {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct InlineText(pub Vec<Atom>);
 
+/// Kind of a GitHub alert, introduced by `> [!NOTE]` and friends.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AlertKind {
+    Note,
+    Tip,
+    Important,
+    Warning,
+    Caution,
+}
+
+impl AlertKind {
+    /// Label shown on the first line of the alert.
+    pub fn label(self) -> &'static str {
+        match self {
+            AlertKind::Note => "NOTE",
+            AlertKind::Tip => "TIP",
+            AlertKind::Important => "IMPORTANT",
+            AlertKind::Warning => "WARNING",
+            AlertKind::Caution => "CAUTION",
+        }
+    }
+
+    /// Index of the alert's style slot in the theme.
+    pub fn index(self) -> usize {
+        match self {
+            AlertKind::Note => 0,
+            AlertKind::Tip => 1,
+            AlertKind::Important => 2,
+            AlertKind::Warning => 3,
+            AlertKind::Caution => 4,
+        }
+    }
+}
+
+/// Syntax of a metadata block at the top of a document.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrontMatterKind {
+    Yaml,
+    Toml,
+}
+
+impl FrontMatterKind {
+    /// Highlighting language of the block content.
+    pub fn language(self) -> &'static str {
+        match self {
+            FrontMatterKind::Yaml => "yaml",
+            FrontMatterKind::Toml => "toml",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Block {
     Paragraph(InlineText),
@@ -48,7 +99,10 @@ pub enum Block {
         lang: Option<String>,
         code: String,
     },
-    BlockQuote(Vec<Block>),
+    BlockQuote {
+        kind: Option<AlertKind>,
+        blocks: Vec<Block>,
+    },
     List {
         start: Option<u64>,
         tight: bool,
@@ -57,6 +111,18 @@ pub enum Block {
     Table(Table),
     Rule,
     Html(String),
+    FrontMatter {
+        kind: FrontMatterKind,
+        text: String,
+    },
+}
+
+/// A parsed document: its blocks and the footnote definitions in reference order.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Document {
+    pub blocks: Vec<Block>,
+    /// Footnote bodies, indexed by the number shown in the text minus one.
+    pub footnotes: Vec<Vec<Block>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

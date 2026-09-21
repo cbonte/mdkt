@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use clap::{Args as ClapArgs, ValueEnum};
 
-use crate::options::{Glyphs, LinkMode, RenderOptions, TableOverflow, defaults};
+use crate::options::{FrontMatter, Glyphs, LinkMode, RenderOptions, TableOverflow, defaults};
 use crate::style::ColorLevel;
 use crate::term::Probe;
 use crate::wrap::SoftBreaks;
@@ -80,6 +80,10 @@ pub struct Args {
     #[arg(long)]
     pub no_heading_marker: bool,
 
+    /// YAML or TOML metadata block at the top of the document.
+    #[arg(long, value_enum, default_value_t)]
+    pub front_matter: FrontMatter,
+
     /// Hide the file name header printed when several files are rendered.
     #[arg(long)]
     pub no_header: bool,
@@ -125,6 +129,7 @@ pub fn resolve(cli: &Args, probe: &Probe) -> RenderOptions {
         tab_width: cli.tab_width,
         table_overflow: cli.table_overflow,
         heading_marker: !cli.no_heading_marker,
+        front_matter: cli.front_matter,
         ..RenderOptions::default()
     }
 }
@@ -191,6 +196,18 @@ mod tests {
         let mut p = probe(true);
         p.no_color = true;
         assert_eq!(resolve(&cli(&[]), &p).color, ColorLevel::None);
+    }
+
+    #[test]
+    fn front_matter_hidden_by_default() {
+        assert_eq!(
+            resolve(&cli(&[]), &probe(true)).front_matter,
+            FrontMatter::Hide
+        );
+        assert_eq!(
+            resolve(&cli(&["--front-matter", "show"]), &probe(true)).front_matter,
+            FrontMatter::Show
+        );
     }
 
     #[test]

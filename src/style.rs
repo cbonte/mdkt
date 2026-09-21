@@ -258,6 +258,9 @@ pub struct Theme {
     pub table_header: Style,
     pub task_done: Style,
     pub html: Style,
+    /// One slot per `AlertKind`, in `AlertKind::index` order.
+    pub alert: [Style; 5],
+    pub footnote_ref: Style,
     /// File name printed above each document when several are rendered.
     pub file_header: Style,
 }
@@ -293,6 +296,14 @@ impl Default for Theme {
             table_header: plain.bold(),
             task_done: plain.fg(Color::Ansi16(10)),
             html: plain.dim(),
+            alert: [
+                plain.fg(Color::Ansi16(12)),
+                plain.fg(Color::Ansi16(10)),
+                plain.fg(Color::Ansi16(13)),
+                plain.fg(Color::Ansi16(11)),
+                plain.fg(Color::Ansi16(9)),
+            ],
+            footnote_ref: plain.fg(Color::Ansi16(14)),
             file_header: plain.bold().fg(Color::Ansi16(13)),
         }
     }

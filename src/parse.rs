@@ -2,15 +2,36 @@
 
 use std::rc::Rc;
 
-use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{
+    Alignment, BlockQuoteKind, CodeBlockKind, Event, HeadingLevel, MetadataBlockKind, Options,
+    Parser, Tag, TagEnd,
+};
 
 use crate::html;
-use crate::model::{Align, Atom, Block, InlineText, ListItem, Segment, Table};
+use crate::model::{
+    AlertKind, Align, Atom, Block, Document, FrontMatterKind, InlineText, ListItem, Segment, Table,
+};
 use crate::options::LinkMode;
 use crate::style::{Style, Theme};
 
 fn parser_options() -> Options {
-    Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS
+    Options::ENABLE_TABLES
+        | Options::ENABLE_STRIKETHROUGH
+        | Options::ENABLE_TASKLISTS
+        | Options::ENABLE_FOOTNOTES
+        | Options::ENABLE_GFM
+        | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS
+        | Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS
+}
+
+fn convert_alert(kind: BlockQuoteKind) -> AlertKind {
+    match kind {
+        BlockQuoteKind::Note => AlertKind::Note,
+        BlockQuoteKind::Tip => AlertKind::Tip,
+        BlockQuoteKind::Important => AlertKind::Important,
+        BlockQuoteKind::Warning => AlertKind::Warning,
+        BlockQuoteKind::Caution => AlertKind::Caution,
+    }
 }
 
 /// What an open inline HTML tag did to the builder, undone when the tag closes.
@@ -226,7 +247,18 @@ enum InlineKind {
 
 enum Open<'t> {
     Doc(Vec<Block>),
-    Quote(Vec<Block>),
+    Quote {
+        kind: Option<AlertKind>,
+        blocks: Vec<Block>,
+    },
+    FootnoteDef {
+        label: String,
+        blocks: Vec<Block>,
+    },
+    FrontMatter {
+        kind: FrontMatterKind,
+        text: String,
+    },
     List {
         start: Option<u64>,
         items: Vec<ListItem>,
@@ -258,6 +290,23 @@ struct Stack<'t> {
     theme: &'t Theme,
     links: LinkMode,
     open: Vec<Open<'t>>,
+    /// Footnote definitions in source order: (label, blocks).
+    footnotes: Vec<(String, Vec<Block>)>,
+    /// Footnote labels in order of first reference.
+    referenced: Vec<String>,
+}
+
+impl Stack<'_> {
+    /// Number shown for a footnote reference, assigned on first use.
+    fn footnote_number(&mut self, label: &str) -> usize {
+        match self.referenced.iter().position(|l| l == label) {
+            Some(i) => i + 1,
+            None => {
+                self.referenced.push(label.to_string());
+                self.referenced.len()
+            }
+        }
+    }
 }
 
 impl<'t> Stack<'t> {
@@ -267,9 +316,10 @@ impl<'t> Stack<'t> {
 
     fn push_block(&mut self, block: Block) {
         match self.top() {
-            Open::Doc(blocks) | Open::Quote(blocks) | Open::Item { blocks, .. } => {
-                blocks.push(block)
-            }
+            Open::Doc(blocks)
+            | Open::Quote { blocks, .. }
+            | Open::FootnoteDef { blocks, .. }
+            | Open::Item { blocks, .. } => blocks.push(block),
             _ => {
                 if let Some(Open::Doc(blocks)) = self.open.first_mut() {
                     blocks.push(block);
@@ -364,9 +414,12 @@ impl<'t> Stack<'t> {
                 let base = self.theme.heading[usize::from(level - 1)];
                 self.open_inline(InlineKind::Heading(level), base);
             }
-            Tag::BlockQuote(_) => {
+            Tag::BlockQuote(kind) => {
                 self.close_implicit();
-                self.open.push(Open::Quote(Vec::new()));
+                self.open.push(Open::Quote {
+                    kind: kind.map(convert_alert),
+                    blocks: Vec::new(),
+                });
             }
             Tag::CodeBlock(kind) => {
                 self.close_implicit();
@@ -437,11 +490,24 @@ impl<'t> Stack<'t> {
             Tag::Superscript | Tag::Subscript => self.builder().push_style(Style::PLAIN),
             Tag::Link { dest_url, .. } => self.builder().start_target(&dest_url, false),
             Tag::Image { dest_url, .. } => self.builder().start_target(&dest_url, true),
-            Tag::FootnoteDefinition(_)
-            | Tag::DefinitionList
-            | Tag::DefinitionListTitle
-            | Tag::DefinitionListDefinition
-            | Tag::MetadataBlock(_) => {}
+            Tag::FootnoteDefinition(label) => {
+                self.close_implicit();
+                self.open.push(Open::FootnoteDef {
+                    label: label.to_string(),
+                    blocks: Vec::new(),
+                });
+            }
+            Tag::MetadataBlock(kind) => {
+                self.close_implicit();
+                self.open.push(Open::FrontMatter {
+                    kind: match kind {
+                        MetadataBlockKind::YamlStyle => FrontMatterKind::Yaml,
+                        MetadataBlockKind::PlusesStyle => FrontMatterKind::Toml,
+                    },
+                    text: String::new(),
+                });
+            }
+            Tag::DefinitionList | Tag::DefinitionListTitle | Tag::DefinitionListDefinition => {}
         }
     }
 
@@ -450,8 +516,8 @@ impl<'t> Stack<'t> {
             TagEnd::Paragraph | TagEnd::Heading(_) | TagEnd::TableCell => self.close_inline(),
             TagEnd::BlockQuote(_) => {
                 self.close_implicit();
-                if let Some(Open::Quote(blocks)) = self.open.pop() {
-                    self.push_block(Block::BlockQuote(blocks));
+                if let Some(Open::Quote { kind, blocks }) = self.open.pop() {
+                    self.push_block(Block::BlockQuote { kind, blocks });
                 }
             }
             TagEnd::CodeBlock => {
@@ -511,11 +577,20 @@ impl<'t> Stack<'t> {
             | TagEnd::Superscript
             | TagEnd::Subscript => self.builder().pop_style(),
             TagEnd::Link | TagEnd::Image => self.builder().end_target(),
-            TagEnd::FootnoteDefinition
-            | TagEnd::DefinitionList
+            TagEnd::FootnoteDefinition => {
+                self.close_implicit();
+                if let Some(Open::FootnoteDef { label, blocks }) = self.open.pop() {
+                    self.footnotes.push((label, blocks));
+                }
+            }
+            TagEnd::MetadataBlock(_) => {
+                if let Some(Open::FrontMatter { kind, text }) = self.open.pop() {
+                    self.push_block(Block::FrontMatter { kind, text });
+                }
+            }
+            TagEnd::DefinitionList
             | TagEnd::DefinitionListTitle
-            | TagEnd::DefinitionListDefinition
-            | TagEnd::MetadataBlock(_) => {}
+            | TagEnd::DefinitionListDefinition => {}
         }
     }
 
@@ -525,6 +600,7 @@ impl<'t> Stack<'t> {
             Event::End(tag) => self.end(tag),
             Event::Text(s) => match self.top() {
                 Open::Code { code, .. } => code.push_str(&s),
+                Open::FrontMatter { text, .. } => text.push_str(&s),
                 Open::Html(html) => html.push_str(&s),
                 _ => self.builder().text(&s),
             },
@@ -546,7 +622,14 @@ impl<'t> Stack<'t> {
                     }
                 }
             }
-            Event::FootnoteReference(s) => self.builder().text(&format!("[^{s}]")),
+            Event::FootnoteReference(label) => {
+                let number = self.footnote_number(&label);
+                let style = self.theme.footnote_ref;
+                let b = self.builder();
+                b.push_style(style);
+                b.text(&format!("[{number}]"));
+                b.pop_style();
+            }
             Event::SoftBreak => self.builder().soft_break(),
             Event::HardBreak => self.builder().hard_break(),
             Event::Rule => {
@@ -584,12 +667,14 @@ fn convert_align(a: Alignment) -> Align {
     }
 }
 
-/// Parses `md` into blocks. Styles from `theme` are attached to inline segments here.
-pub fn parse(md: &str, theme: &Theme, links: LinkMode) -> Vec<Block> {
+/// Parses `md` into a document. Styles from `theme` are attached to inline segments here.
+pub fn parse(md: &str, theme: &Theme, links: LinkMode) -> Document {
     let mut stack = Stack {
         theme,
         links,
         open: vec![Open::Doc(Vec::new())],
+        footnotes: Vec::new(),
+        referenced: Vec::new(),
     };
     for ev in Parser::new_ext(md, parser_options()) {
         stack.event(ev);
@@ -600,10 +685,28 @@ pub fn parse(md: &str, theme: &Theme, links: LinkMode) -> Vec<Block> {
             stack.open.pop();
         }
     }
-    match stack.open.pop() {
+    let blocks = match stack.open.pop() {
         Some(Open::Doc(blocks)) => blocks,
         _ => Vec::new(),
+    };
+    // Definitions never referenced are appended after the referenced ones.
+    let mut order = stack.referenced;
+    for (label, _) in &stack.footnotes {
+        if !order.contains(label) {
+            order.push(label.clone());
+        }
     }
+    let footnotes = order
+        .iter()
+        .filter_map(|label| {
+            stack
+                .footnotes
+                .iter()
+                .find(|(l, _)| l == label)
+                .map(|(_, blocks)| blocks.clone())
+        })
+        .collect();
+    Document { blocks, footnotes }
 }
 
 #[cfg(test)]
@@ -611,7 +714,7 @@ mod tests {
     use super::*;
 
     fn parse_plain(md: &str) -> Vec<Block> {
-        parse(md, &Theme::default(), LinkMode::Inline)
+        parse(md, &Theme::default(), LinkMode::Inline).blocks
     }
 
     fn words(text: &InlineText) -> Vec<String> {
@@ -696,6 +799,56 @@ mod tests {
         assert_eq!(t.head.len(), 2);
         assert_eq!(t.rows.len(), 1);
         assert_eq!(t.align[1], Align::Right);
+    }
+
+    #[test]
+    fn alerts_carry_their_kind() {
+        let blocks = parse_plain("> [!WARNING]\n> careful\n\n> plain\n");
+        let Block::BlockQuote { kind, .. } = &blocks[0] else {
+            panic!()
+        };
+        assert_eq!(*kind, Some(AlertKind::Warning));
+        let Block::BlockQuote { kind, .. } = &blocks[1] else {
+            panic!()
+        };
+        assert_eq!(*kind, None);
+    }
+
+    #[test]
+    fn footnotes_are_numbered_by_first_reference() {
+        let doc = parse(
+            "b[^b] a[^a] b[^b]\n\n[^a]: first def\n[^b]: second def\n[^c]: unused\n",
+            &Theme::default(),
+            LinkMode::Inline,
+        );
+        let Block::Paragraph(t) = &doc.blocks[0] else {
+            panic!()
+        };
+        assert_eq!(words(t), ["b[1]", "_", "a[2]", "_", "b[1]"]);
+        assert_eq!(doc.footnotes.len(), 3);
+        let Block::Paragraph(first) = &doc.footnotes[0][0] else {
+            panic!()
+        };
+        assert_eq!(words(first), ["second", "_", "def"]);
+        let Block::Paragraph(last) = &doc.footnotes[2][0] else {
+            panic!()
+        };
+        assert_eq!(words(last), ["unused"]);
+    }
+
+    #[test]
+    fn front_matter_is_a_block() {
+        let blocks = parse_plain("---\ntitle: x\n---\n\nbody\n");
+        let Block::FrontMatter { kind, text } = &blocks[0] else {
+            panic!("{blocks:?}")
+        };
+        assert_eq!(*kind, FrontMatterKind::Yaml);
+        assert_eq!(text, "title: x\n");
+        let blocks = parse_plain("+++\ntitle = \"x\"\n+++\n\nbody\n");
+        let Block::FrontMatter { kind, .. } = &blocks[0] else {
+            panic!("{blocks:?}")
+        };
+        assert_eq!(*kind, FrontMatterKind::Toml);
     }
 
     #[test]

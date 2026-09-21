@@ -4,8 +4,8 @@ use std::io::{self, Write};
 
 use crate::ansi::AnsiWriter;
 use crate::highlight::{Highlighter, plain_lines};
-use crate::model::{Block, InlineText, Line, ListItem, Segment};
-use crate::options::RenderOptions;
+use crate::model::{AlertKind, Block, InlineText, Line, ListItem, Segment};
+use crate::options::{FrontMatter, RenderOptions};
 use crate::style::Style;
 use crate::table;
 use crate::wrap::{WrapOptions, display_width, segments_width, wrap};
@@ -161,15 +161,7 @@ impl<'a, W: Write> Renderer<'a, W> {
             Block::Paragraph(text) => self.emit_wrapped(text),
             Block::Heading { level, content } => self.render_heading(*level, content),
             Block::CodeBlock { lang, code } => self.render_code(lang.as_deref(), code),
-            Block::BlockQuote(blocks) => {
-                let marker = Segment::new(
-                    self.opts.glyphs.quote_marker.clone(),
-                    self.opts.theme.quote_marker,
-                );
-                self.with_prefix(Prefix::same(vec![marker]), |r| {
-                    r.render_blocks(blocks, false)
-                })
-            }
+            Block::BlockQuote { kind, blocks } => self.render_quote(*kind, blocks),
             Block::List {
                 start,
                 tight,
@@ -187,6 +179,10 @@ impl<'a, W: Write> Renderer<'a, W> {
                 let rule = self.opts.glyphs.rule.to_string().repeat(width);
                 self.emit_line(&vec![Segment::new(rule, self.opts.theme.rule)])
             }
+            Block::FrontMatter { kind, text } => match self.opts.front_matter {
+                FrontMatter::Hide => Ok(()),
+                FrontMatter::Show => self.render_code(Some(kind.language()), text),
+            },
             Block::Html(html) => {
                 for line in plain_lines(html, self.opts.theme.html) {
                     self.emit_line(&line)?;
@@ -194,6 +190,22 @@ impl<'a, W: Write> Renderer<'a, W> {
                 Ok(())
             }
         }
+    }
+
+    fn render_quote(&mut self, kind: Option<AlertKind>, blocks: &[Block]) -> io::Result<()> {
+        let style = match kind {
+            Some(kind) => self.opts.theme.alert[kind.index()],
+            None => self.opts.theme.quote_marker,
+        };
+        let marker = Segment::new(self.opts.glyphs.quote_marker.clone(), style);
+        self.with_prefix(Prefix::same(vec![marker]), |r| {
+            if let Some(kind) = kind {
+                let label = vec![Segment::new(kind.label(), style.bold())];
+                r.emit_line(&label)?;
+                r.blank_pending = true;
+            }
+            r.render_blocks(blocks, false)
+        })
     }
 
     fn render_heading(&mut self, level: u8, content: &InlineText) -> io::Result<()> {
