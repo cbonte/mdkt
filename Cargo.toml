@@ -1,6 +1,6 @@
 [package]
 name = "mdkt"
-description = "Render Markdown as styled text in the terminal"
+description = "Markdown tools for the terminal: render, format, table of contents, lint"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"

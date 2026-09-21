@@ -14,6 +14,7 @@ pub mod slug;
 pub mod style;
 pub mod table;
 pub mod term;
+pub mod toc;
 pub mod wrap;
 
 use std::io::Write;
