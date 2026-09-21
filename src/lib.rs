@@ -10,6 +10,7 @@ pub mod model;
 pub mod options;
 pub mod pager;
 pub mod parse;
+pub mod slug;
 pub mod style;
 pub mod table;
 pub mod term;
@@ -103,6 +104,45 @@ pub fn render_file_header(name: &str, opts: &RenderOptions, out: &mut dyn Write)
     writer.end_line()?;
     writer.flush()?;
     Ok(())
+}
+
+/// Writes the document outline, one heading per line, indented by level.
+pub fn render_outline(
+    doc: &Document,
+    depth: u8,
+    opts: &RenderOptions,
+    out: &mut dyn Write,
+) -> Result<()> {
+    let entries: Vec<slug::Entry> = slug::outline(doc)
+        .into_iter()
+        .filter(|e| e.level <= depth)
+        .collect();
+    let top = entries.iter().map(|e| e.level).min().unwrap_or(1);
+    let mut writer = AnsiWriter::new(out, opts.color, false);
+    for entry in &entries {
+        let indent = usize::from(entry.level - top) * options::defaults::TOC_INDENT;
+        writer.write_segment(&Segment::new(" ".repeat(indent), opts.theme.base))?;
+        writer.write_segment(&Segment::new(
+            opts.glyphs.bullet.clone(),
+            opts.theme.list_marker,
+        ))?;
+        writer.write_segment(&Segment::new(entry.text.clone(), opts.theme.base))?;
+        writer.end_line()?;
+    }
+    writer.flush()?;
+    Ok(())
+}
+
+/// Keeps only the section opened by the heading named `name`.
+/// Returns `None` when no heading matches.
+pub fn section(doc: &Document, name: &str) -> Option<Document> {
+    let entries = slug::outline(doc);
+    let entry = slug::find_section(&entries, name)?;
+    let range = slug::section_range(doc, entry);
+    Some(Document {
+        blocks: doc.blocks[range].to_vec(),
+        footnotes: doc.footnotes.clone(),
+    })
 }
 
 /// Convenience for tests: renders to a `String`.

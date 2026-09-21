@@ -155,3 +155,29 @@ fn pager_flag_is_ignored_without_a_terminal() {
     let paged = stdout(&run(&["-w", "20", "--pager"], md, &[("PAGER", "false")]));
     assert_eq!(paged, plain);
 }
+
+#[test]
+fn outline_and_section() {
+    let md = "# Title\n\nintro\n\n## Usage\n\nuse it\n\n### Flags\n\nflags\n\n## Usage\n\nagain\n";
+    let o = run(&["--toc", "--borders", "ascii", "-w", "40"], md, &[]);
+    assert_eq!(stdout(&o), "- Title\n  - Usage\n    - Flags\n  - Usage\n");
+    let o = run(
+        &["--toc", "--toc-depth", "2", "--borders", "ascii"],
+        md,
+        &[],
+    );
+    assert_eq!(stdout(&o), "- Title\n  - Usage\n  - Usage\n");
+
+    let o = run(&["--section", "Flags", "-w", "40"], md, &[]);
+    assert_eq!(stdout(&o), "### Flags\n\nflags\n");
+    // The second Usage is reachable by its disambiguated anchor.
+    let o = run(&["--section", "usage-1", "-w", "40"], md, &[]);
+    assert_eq!(stdout(&o), "## Usage\n\nagain\n");
+    let o = run(&["--section", "nope", "-w", "40"], md, &[]);
+    assert!(!o.status.success());
+    assert!(
+        String::from_utf8(o.stderr)
+            .unwrap()
+            .contains("no heading matching")
+    );
+}

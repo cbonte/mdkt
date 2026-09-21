@@ -5,7 +5,7 @@
 //! close in a later one with Markdown blocks in between. The converter keeps its open
 //! containers across sibling blocks to reassemble them.
 
-use crate::model::{Align, Atom, Block, InlineText, ListItem, Segment, Table};
+use crate::model::{Align, Block, InlineText, ListItem, Table};
 use crate::options::LinkMode;
 use crate::parse::InlineBuilder;
 use crate::style::{Style, Theme};
@@ -736,23 +736,11 @@ pub fn expand(blocks: Vec<Block>, theme: &Theme, links: LinkMode) -> Vec<Block> 
     conv.finish()
 }
 
-/// Plain text of an inline, for tests and diagnostics.
-pub fn inline_to_string(text: &InlineText) -> String {
-    let mut out = String::new();
-    for atom in &text.0 {
-        match atom {
-            Atom::Word(segs) => out.extend(segs.iter().map(|s: &Segment| s.text.as_str())),
-            Atom::Space => out.push(' '),
-            Atom::SoftBreak => out.push('\n'),
-            Atom::HardBreak => out.push('\n'),
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{Atom, Segment};
+    use crate::slug::inline_text as inline_to_string;
 
     #[test]
     fn tokenizer_handles_attributes_and_comments() {
@@ -844,7 +832,7 @@ mod tests {
         let Block::Paragraph(t) = &b[0] else {
             panic!("{b:?}")
         };
-        assert_eq!(inline_to_string(t), "a bold b\nc pic (i.png) d");
+        assert_eq!(inline_to_string(t), "a bold b c pic (i.png) d");
         let Atom::Word(w) = &t.0[2] else { panic!() };
         assert!(w[0].style.bold);
     }

@@ -88,6 +88,18 @@ pub struct Args {
     #[arg(long)]
     pub no_header: bool,
 
+    /// Print the heading outline instead of the document.
+    #[arg(long)]
+    pub toc: bool,
+
+    /// Deepest heading level listed by --toc.
+    #[arg(long, default_value_t = defaults::TOC_DEPTH, value_name = "N")]
+    pub toc_depth: u8,
+
+    /// Render only the section opened by this heading, by text or by anchor.
+    #[arg(long, value_name = "HEADING")]
+    pub section: Option<String>,
+
     /// Send the output to a pager; the command comes from MDKT_PAGER or PAGER.
     #[arg(short, long)]
     pub pager: bool,

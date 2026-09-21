@@ -26,6 +26,8 @@ code is non-zero.
 | Tables | column widths fitted to the line, cells wrapped | `--table-overflow wrap`, `truncate` |
 | Headings | `#` markers kept | `--no-heading-marker` |
 | Front matter | YAML or TOML metadata block hidden | `--front-matter show` |
+| Outline | off | `--toc`, `--toc-depth N` |
+| Section | whole document | `--section HEADING` by text or by anchor |
 | Pager | off; `-p` sends the output to `MDKT_PAGER`, `PAGER`, else `less -R -F` | `-p`, `--pager` |
 
 Continuation lines inside lists and block quotes stay aligned under the item text in both

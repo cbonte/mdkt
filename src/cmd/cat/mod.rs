@@ -27,16 +27,32 @@ fn read_input(path: &Path) -> Result<String> {
     Ok(text)
 }
 
-fn render_one(path: &Path, header: bool, opts: &RenderOptions, out: &mut dyn Write) -> Result<()> {
+fn render_one(
+    cli: &Args,
+    path: &Path,
+    header: bool,
+    opts: &RenderOptions,
+    out: &mut dyn Write,
+) -> Result<()> {
     let text = read_input(path)?;
     if header {
         crate::render_file_header(&path.display().to_string(), opts, out)?;
     }
-    crate::render(&text, opts, out)
+    let doc = crate::document(&text, opts);
+    if cli.toc {
+        return crate::render_outline(&doc, cli.toc_depth, opts, out);
+    }
+    let doc = match &cli.section {
+        Some(name) => crate::section(&doc, name)
+            .with_context(|| format!("no heading matching '{name}' in {}", path.display()))?,
+        None => doc,
+    };
+    crate::render_document(doc, opts, out)
 }
 
 /// Renders every file into `out`; returns the number of files that failed.
 fn render_all(
+    cli: &Args,
     files: &[&Path],
     header: bool,
     opts: &RenderOptions,
@@ -47,7 +63,7 @@ fn render_all(
         if i > 0 {
             out.write_all(b"\n")?;
         }
-        if let Err(e) = render_one(path, header, opts, out) {
+        if let Err(e) = render_one(cli, path, header, opts, out) {
             if is_broken_pipe(&e) {
                 return Err(e);
             }
@@ -90,10 +106,10 @@ fn render_files(cli: &Args) -> Result<usize> {
     };
     let Some(mut child) = child else {
         let mut out = io::BufWriter::new(io::stdout().lock());
-        return render_all(&files, header, &opts, &mut out);
+        return render_all(cli, &files, header, &opts, &mut out);
     };
     let mut pipe = io::BufWriter::new(child.stdin.take().expect("piped stdin"));
-    let failures = render_all(&files, header, &opts, &mut pipe);
+    let failures = render_all(cli, &files, header, &opts, &mut pipe);
     drop(pipe);
     child.wait()?;
     // The reader quitting early is not a failure.

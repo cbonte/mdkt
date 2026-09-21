@@ -80,6 +80,10 @@ pub mod defaults {
     /// Spaces on each side of a table cell.
     pub const TABLE_PADDING: usize = 1;
     pub const CODE_THEME: &str = "base16-ocean.dark";
+    /// Deepest heading level listed by an outline.
+    pub const TOC_DEPTH: u8 = 3;
+    /// Columns of indentation per outline level.
+    pub const TOC_INDENT: usize = 2;
 }
 
 #[derive(Clone, Debug)]
