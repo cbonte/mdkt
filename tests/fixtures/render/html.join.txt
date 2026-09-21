@@ -1,0 +1,31 @@
+Logo (logo.png)
+Project — a tiny tool
+
+Text with Ctrl+C, sub, old and a link
+(https://example.com).
+New line after br.
+
+Click to expand
+
+Markdown inside details.
+
+- item
+
+> Quoted with html
+
+## HTML heading
+
+3. third
+4. fourth with wrapped source
+
++-----+-------+
+| Key | Value |
++-----+-------+
+| a   |     1 |
++-----+-------+
+
+  print("hi & bye")
+
+----------------------------------------
+
+Block text <escaped> © end.

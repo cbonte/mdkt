@@ -1,0 +1,5 @@
+Plain emphasis strong both strike
+inline code and bold
+glued words like abc end here.
+
+Inline code with  spaces keeps them.

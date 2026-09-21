@@ -1,0 +1,11 @@
+This paragraph is written with short
+source lines that CommonMark joins
+into one flowing paragraph.
+
+> - A list item inside a quote with a
+>   second source line, then a very long
+>   line that must wrap to the width
+>   and a third short line.
+> - Second item.
+
+Last line.

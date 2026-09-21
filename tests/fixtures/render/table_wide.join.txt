@@ -1,0 +1,11 @@
++-------+-----------------+------------+
+| Name  | Description     | Notes      |
++-------+-----------------+------------+
+| alpha | A rather long   | short      |
+|       | description     |            |
+|       | that has to be  |            |
+|       | wrapped inside  |            |
+|       | the cell        |            |
+| beta  | tiny            | another    |
+|       |                 | note here  |
++-------+-----------------+------------+

@@ -1,0 +1,11 @@
+Before.
+
+  fn main() {
+      let x = "tab indented";
+  }
+
+- item
+
+    echo "in a list"
+
+After.

@@ -1,0 +1,4 @@
+See [the docs](https://example.com/docs) and <https://example.com> and
+<mail@example.com> and ![alt text](img.png).
+
+[Same text as url](Same%20text) done.

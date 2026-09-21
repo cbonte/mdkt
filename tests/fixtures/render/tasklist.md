@@ -1,0 +1,3 @@
+- [x] done task
+- [ ] open task with a long description that wraps to the following line
+- normal item

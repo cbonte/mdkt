@@ -1,0 +1,4 @@
+| Left | Center | Right |
+|:-----|:------:|------:|
+| a    |   b    |     c |
+| long cell | x | 12345 |
