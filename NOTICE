@@ -1,0 +1,19 @@
+mdkt
+Copyright (c) 2026 Cyril Bonté
+
+Third-party software linked into the mdkt binary. Each crate keeps its own licence.
+
+| Crates                                                                      | Licence                              |
+| --------------------------------------------------------------------------- | ------------------------------------ |
+| pulldown-cmark, syntect, fancy-regex, bincode                               | MIT                                  |
+| clap, clap_complete, clap_mangen, anyhow, serde, terminal_size, flate2      | MIT or Apache-2.0                    |
+| unicode-width, regex-automata, regex-syntax                                 | MIT or Apache-2.0                    |
+| aho-corasick, memchr                                                        | Unlicense or MIT                     |
+| miniz_oxide                                                                 | MIT or Zlib or Apache-2.0            |
+| adler2                                                                      | 0BSD or MIT or Apache-2.0            |
+| unicode-ident                                                               | (MIT or Apache-2.0) and Unicode-3.0  |
+
+The complete list, with versions, comes from `cargo tree` and Cargo.lock.
+
+syntect embeds the syntax definitions and colour themes it ships with its default
+features. They remain under the terms published in the syntect repository.
