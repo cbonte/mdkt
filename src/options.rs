@@ -49,6 +49,10 @@ pub struct Glyphs {
     pub dotted: [char; 2],
     /// One cell of a chart bar.
     pub bar: char,
+    /// Heads of class relations pointing north, east, south and west, and the two diamonds.
+    pub inherit: [char; 4],
+    pub composition: char,
+    pub aggregation: char,
     /// Initial and final pseudo-states of a state diagram.
     pub start_state: String,
     pub end_state: String,
@@ -70,6 +74,9 @@ impl Glyphs {
             thick: THICK_BORDERS,
             dotted: ['\u{2504}', '\u{2506}'],
             bar: '\u{2588}',
+            inherit: ['\u{25b3}', '\u{25b7}', '\u{25bd}', '\u{25c1}'],
+            composition: '\u{25c6}',
+            aggregation: '\u{25c7}',
             start_state: "\u{25cf}".into(),
             end_state: "\u{25c9}".into(),
             task_done: "[\u{2713}] ".into(),
@@ -90,6 +97,9 @@ impl Glyphs {
             thick: ASCII_THICK_BORDERS,
             dotted: ['.', ':'],
             bar: '#',
+            inherit: ['^', '>', 'v', '<'],
+            composition: '*',
+            aggregation: 'o',
             start_state: "*".into(),
             end_state: "(*)".into(),
             task_done: "[x] ".into(),

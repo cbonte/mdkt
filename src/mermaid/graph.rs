@@ -59,6 +59,12 @@ pub enum Shape {
 pub enum Head {
     None,
     Arrow,
+    /// Hollow triangle of a class inheritance.
+    Inherit,
+    /// Filled diamond of a composition.
+    Composition,
+    /// Hollow diamond of an aggregation.
+    Aggregation,
 }
 
 #[derive(Debug, PartialEq, Eq)]

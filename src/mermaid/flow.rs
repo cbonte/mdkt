@@ -219,26 +219,31 @@ fn place_label(canvas: &mut Canvas, path: &[(usize, usize)], label: &str) -> boo
         }
     }
     runs.sort_by_key(|r| std::cmp::Reverse(r.len()));
-    // First with a blank cell on each side of the label, then without.
+    // First with a blank cell on each side of the label, then without. Along a run, the
+    // positions closest to its middle come first.
     for margin in [1, 0] {
         for run in &runs {
             let (first, last) = (run[0], run[run.len() - 1]);
-            let candidates: Vec<(usize, usize)> = if first.1 == last.1 {
-                let lo = first.0.min(last.0);
-                let x = if width <= run.len() {
-                    lo + (run.len() - width) / 2
-                } else {
-                    lo
-                };
-                vec![(x, first.1.wrapping_sub(1)), (x, first.1 + 1)]
+            let mut candidates: Vec<(usize, usize, usize)> = Vec::new();
+            if first.1 == last.1 {
+                let (lo, hi) = (first.0.min(last.0), first.0.max(last.0));
+                let middle = (lo + hi) / 2;
+                for x in lo..=hi {
+                    let distance = (x + width / 2).abs_diff(middle);
+                    candidates.push((distance, x, first.1.wrapping_sub(1)));
+                    candidates.push((distance, x, first.1 + 1));
+                }
             } else {
-                let y = (first.1 + last.1) / 2;
-                vec![
-                    (first.0 + 1 + margin, y),
-                    (first.0.wrapping_sub(width + margin), y),
-                ]
-            };
-            for (x, y) in candidates {
+                let (lo, hi) = (first.1.min(last.1), first.1.max(last.1));
+                let middle = (lo + hi) / 2;
+                for y in lo..=hi {
+                    let distance = y.abs_diff(middle);
+                    candidates.push((distance, first.0 + 1 + margin, y));
+                    candidates.push((distance, first.0.wrapping_sub(width + margin), y));
+                }
+            }
+            candidates.sort_by_key(|&(distance, ..)| distance);
+            for (_, x, y) in candidates {
                 let fits = x >= margin
                     && x.checked_add(width + margin)
                         .is_some_and(|end| end < canvas.width())
@@ -413,6 +418,9 @@ fn head_glyph(head: Head, heading: Dir, opts: &RenderOptions) -> Option<char> {
     match head {
         Head::None => None,
         Head::Arrow => Some(opts.glyphs.arrows[heading.index()]),
+        Head::Inherit => Some(opts.glyphs.inherit[heading.index()]),
+        Head::Composition => Some(opts.glyphs.composition),
+        Head::Aggregation => Some(opts.glyphs.aggregation),
     }
 }
 
@@ -548,7 +556,7 @@ mod tests {
         let art = draw_plain("graph LR\n A -->|ok| B\n", 40).unwrap();
         assert_eq!(
             art,
-            "+---+  ok  +---+\n| A +----->| B |\n+---+      +---+\n"
+            "+---+ ok   +---+\n| A +----->| B |\n+---+      +---+\n"
         );
     }
 

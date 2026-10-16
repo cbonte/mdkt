@@ -1,6 +1,7 @@
 //! Mermaid diagrams drawn as text.
 
 mod canvas;
+mod class;
 mod flow;
 mod graph;
 mod parse;
@@ -27,6 +28,7 @@ pub fn render(code: &str, width: usize, opts: &RenderOptions) -> Option<Vec<Line
     }
     let flow = match first.split_whitespace().next() {
         Some("stateDiagram" | "stateDiagram-v2") => state::parse(code)?,
+        Some("classDiagram" | "classDiagram-v2") => class::parse(code)?,
         _ => parse::parse(code)?,
     };
     flow::draw(&flow, width, opts)

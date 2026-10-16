@@ -9,6 +9,7 @@
 - cat: show Mermaid blocks as code on request.
 - cat: draw Mermaid pie charts as bars.
 - cat: draw Mermaid state diagrams as text.
+- cat: draw Mermaid class diagrams as text.
 
 # 0.1.0 - 2026-10-16
 

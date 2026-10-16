@@ -64,11 +64,10 @@ pub fn route(
 ) -> Option<Vec<(usize, usize)>> {
     let (w, h) = (canvas.width(), canvas.height());
     let state = |(x, y): (usize, usize), d: Dir| (y * w + x) * 4 + d.index();
-    let open =
-        |x: usize, y: usize| (x, y) == goal || (!blocked.is_blocked(x, y) && canvas.is_free(x, y));
-    if !open(start.0, start.1) {
-        return None;
-    }
+    // The ends may hold the head of another edge that shares the port.
+    let open = |x: usize, y: usize| {
+        (x, y) == goal || (x, y) == start || (!blocked.is_blocked(x, y) && canvas.is_free(x, y))
+    };
     let mut dist = vec![u32::MAX; w * h * 4];
     let mut prev = vec![usize::MAX; w * h * 4];
     let mut heap = BinaryHeap::new();
