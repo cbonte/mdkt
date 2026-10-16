@@ -41,7 +41,8 @@ flowcharts.
 A `mermaid` code block holding a `graph` or `flowchart` is drawn with box characters, in the
 same repertoire as table borders. Nodes may be rectangles `[text]`, rounded `(text)`, `([text])`,
 `((text))` or diamonds `{text}`; `<br/>` in a label starts a new line. Styling lines (`style`,
-`classDef`, `class`, `linkStyle`, `click`) are ignored. A diagram that is not drawn is shown as a plain code block:
+`classDef`, `class`, `linkStyle`, `click`) are ignored. Edges may be `-->`, `---`, dotted `-.->`,
+`-.-` or thick `==>`, `===`, with a label as `-->|text|` or `-- text -->`. A diagram that is not drawn is shown as a plain code block:
 another diagram type, a node shape or edge syntax outside the supported set, a subgraph, a node
 linked to itself, or a drawing wider than the line.
 

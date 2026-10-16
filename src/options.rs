@@ -1,7 +1,7 @@
 //! Fully resolved rendering options and their defaults.
 
 use crate::style::{ColorLevel, Theme};
-use crate::table::{ASCII_BORDERS, Borders, UNICODE_BORDERS};
+use crate::table::{ASCII_BORDERS, ASCII_THICK_BORDERS, Borders, THICK_BORDERS, UNICODE_BORDERS};
 use crate::wrap::SoftBreaks;
 
 /// How links are shown.
@@ -44,6 +44,9 @@ pub struct Glyphs {
     /// Corners of rounded and diamond nodes: top left, top right, bottom left, bottom right.
     pub rounded: [char; 4],
     pub diamond: [char; 4],
+    /// Frame for thick edges, and the horizontal and vertical characters of dotted ones.
+    pub thick: Borders,
+    pub dotted: [char; 2],
     pub task_done: String,
     pub task_todo: String,
 }
@@ -59,6 +62,8 @@ impl Glyphs {
             arrows: ['\u{25b2}', '\u{25ba}', '\u{25bc}', '\u{25c4}'],
             rounded: ['\u{256d}', '\u{256e}', '\u{2570}', '\u{256f}'],
             diamond: ['\u{2571}', '\u{2572}', '\u{2572}', '\u{2571}'],
+            thick: THICK_BORDERS,
+            dotted: ['\u{2504}', '\u{2506}'],
             task_done: "[\u{2713}] ".into(),
             task_todo: "[ ] ".into(),
         }
@@ -74,6 +79,8 @@ impl Glyphs {
             arrows: ['^', '>', 'v', '<'],
             rounded: ['.', '.', '\'', '\''],
             diamond: ['/', '\\', '\\', '/'],
+            thick: ASCII_THICK_BORDERS,
+            dotted: ['.', ':'],
             task_done: "[x] ".into(),
             task_todo: "[ ] ".into(),
         }

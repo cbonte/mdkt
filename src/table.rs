@@ -49,6 +49,25 @@ pub const ASCII_BORDERS: Borders = Borders {
     bottom_right: '+',
 };
 
+pub const THICK_BORDERS: Borders = Borders {
+    h: '\u{2501}',
+    v: '\u{2503}',
+    top_left: '\u{250f}',
+    top_mid: '\u{2533}',
+    top_right: '\u{2513}',
+    mid_left: '\u{2523}',
+    cross: '\u{254b}',
+    mid_right: '\u{252b}',
+    bottom_left: '\u{2517}',
+    bottom_mid: '\u{253b}',
+    bottom_right: '\u{251b}',
+};
+
+pub const ASCII_THICK_BORDERS: Borders = Borders {
+    h: '=',
+    ..ASCII_BORDERS
+};
+
 /// Widths of the longest single-line rendering and of the widest word of a cell.
 fn measure_cell(cell: &InlineText) -> (usize, usize) {
     let natural = wrap(

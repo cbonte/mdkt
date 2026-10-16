@@ -3,6 +3,7 @@
 use unicode_width::UnicodeWidthChar;
 
 use crate::model::{Line, Segment};
+use crate::options::Glyphs;
 use crate::style::Style;
 use crate::table::Borders;
 
@@ -59,11 +60,19 @@ impl Dir {
     }
 }
 
+/// How the lines of a cell are drawn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Weight {
+    Normal,
+    Dotted,
+    Thick,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Cell {
     Empty,
     /// Line segments leaving the cell: a mask of `N`, `E`, `S` and `W`.
-    Lines(u8),
+    Lines(u8, Weight),
     /// A drawing character that is not part of a line.
     Glyph(char),
     Text(char),
@@ -97,21 +106,34 @@ impl Canvas {
     /// Line bits of a cell, 0 when it holds none.
     pub fn lines(&self, x: usize, y: usize) -> u8 {
         match self.cells[y * self.w + x] {
-            Cell::Lines(m) => m,
+            Cell::Lines(m, _) => m,
             _ => 0,
         }
     }
 
     /// True when a line may pass through the cell.
     pub fn is_free(&self, x: usize, y: usize) -> bool {
-        matches!(self.cells[y * self.w + x], Cell::Empty | Cell::Lines(_))
+        matches!(self.cells[y * self.w + x], Cell::Empty | Cell::Lines(..))
     }
 
-    pub fn add_lines(&mut self, x: usize, y: usize, mask: u8) {
+    /// True when nothing is drawn in the cell.
+    pub fn is_empty(&self, x: usize, y: usize) -> bool {
+        self.cells[y * self.w + x] == Cell::Empty
+    }
+
+    /// Adds line segments to a cell. A weight other than `Normal` replaces the cell's.
+    pub fn add_lines(&mut self, x: usize, y: usize, mask: u8, weight: Weight) {
         let cell = &mut self.cells[y * self.w + x];
         match *cell {
-            Cell::Empty => *cell = Cell::Lines(mask),
-            Cell::Lines(m) => *cell = Cell::Lines(m | mask),
+            Cell::Empty => *cell = Cell::Lines(mask, weight),
+            Cell::Lines(m, old) => {
+                let weight = if weight == Weight::Normal {
+                    old
+                } else {
+                    weight
+                };
+                *cell = Cell::Lines(m | mask, weight);
+            }
             _ => {}
         }
     }
@@ -140,21 +162,21 @@ impl Canvas {
     /// Draws a rectangle border of `w` by `h` cells, at least 2 by 2.
     pub fn draw_box(&mut self, x: usize, y: usize, w: usize, h: usize) {
         for cx in x + 1..x + w - 1 {
-            self.add_lines(cx, y, E | W);
-            self.add_lines(cx, y + h - 1, E | W);
+            self.add_lines(cx, y, E | W, Weight::Normal);
+            self.add_lines(cx, y + h - 1, E | W, Weight::Normal);
         }
         for cy in y + 1..y + h - 1 {
-            self.add_lines(x, cy, N | S);
-            self.add_lines(x + w - 1, cy, N | S);
+            self.add_lines(x, cy, N | S, Weight::Normal);
+            self.add_lines(x + w - 1, cy, N | S, Weight::Normal);
         }
-        self.add_lines(x, y, S | E);
-        self.add_lines(x + w - 1, y, S | W);
-        self.add_lines(x, y + h - 1, N | E);
-        self.add_lines(x + w - 1, y + h - 1, N | W);
+        self.add_lines(x, y, S | E, Weight::Normal);
+        self.add_lines(x + w - 1, y, S | W, Weight::Normal);
+        self.add_lines(x, y + h - 1, N | E, Weight::Normal);
+        self.add_lines(x + w - 1, y + h - 1, N | W, Weight::Normal);
     }
 
     /// One line per row, without blank rows at the ends nor blank columns on the left.
-    pub fn into_lines(self, borders: &Borders, line: Style, text: Style) -> Vec<Line> {
+    pub fn into_lines(self, glyphs: &Glyphs, line: Style, text: Style) -> Vec<Line> {
         let rows: Vec<&[Cell]> = self.cells.chunks(self.w.max(1)).collect();
         let used = |row: &&[Cell]| row.iter().any(|c| *c != Cell::Empty);
         let Some(first) = rows.iter().position(used) else {
@@ -181,7 +203,7 @@ impl Canvas {
                 for cell in &row[left.min(end)..end] {
                     match *cell {
                         Cell::Empty => push(' ', text),
-                        Cell::Lines(m) => push(lines_glyph(m, borders), line),
+                        Cell::Lines(m, weight) => push(lines_glyph(m, weight, glyphs), line),
                         Cell::Glyph(ch) => push(ch, line),
                         Cell::Text(ch) => push(ch, text),
                         Cell::Cont => {}
@@ -194,7 +216,21 @@ impl Canvas {
 }
 
 /// The character joining the line segments of `mask`.
-fn lines_glyph(mask: u8, b: &Borders) -> char {
+fn lines_glyph(mask: u8, weight: Weight, glyphs: &Glyphs) -> char {
+    let b = if weight == Weight::Thick {
+        &glyphs.thick
+    } else {
+        &glyphs.borders
+    };
+    let joined = joined_glyph(mask, b);
+    match weight {
+        Weight::Dotted if mask & (E | W) == 0 => glyphs.dotted[1],
+        Weight::Dotted if mask & (N | S) == 0 => glyphs.dotted[0],
+        _ => joined,
+    }
+}
+
+fn joined_glyph(mask: u8, b: &Borders) -> char {
     match (mask & N != 0, mask & E != 0, mask & S != 0, mask & W != 0) {
         (_, false, _, false) => b.v,
         (false, _, false, _) => b.h,
@@ -213,11 +249,10 @@ fn lines_glyph(mask: u8, b: &Borders) -> char {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::table::ASCII_BORDERS;
 
     fn plain(canvas: Canvas) -> Vec<String> {
         canvas
-            .into_lines(&ASCII_BORDERS, Style::PLAIN, Style::PLAIN)
+            .into_lines(&Glyphs::ascii(), Style::PLAIN, Style::PLAIN)
             .iter()
             .map(|l| l.iter().map(|s| s.text.as_str()).collect())
             .collect()
@@ -234,9 +269,9 @@ mod tests {
     #[test]
     fn lines_join_into_a_junction() {
         let mut c = Canvas::new(5, 3);
-        c.add_lines(1, 1, E | W);
-        c.add_lines(2, 1, E | W | S);
-        c.add_lines(2, 2, N);
+        c.add_lines(1, 1, E | W, Weight::Normal);
+        c.add_lines(2, 1, E | W | S, Weight::Normal);
+        c.add_lines(2, 2, N, Weight::Normal);
         assert_eq!(plain(c), ["-+", " |"]);
     }
 

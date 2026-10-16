@@ -1,8 +1,9 @@
-//! Flowcharts: parsing, layered layout and drawing.
+//! Flowcharts: layered layout, edge routing and drawing.
 
 use std::collections::HashMap;
 
-use super::canvas::{Canvas, Dir};
+use super::canvas::{Canvas, Dir, Weight};
+use super::parse::{Direction, Flow, Shape};
 use super::route::{Blocked, route};
 use crate::model::Line;
 use crate::options::RenderOptions;
@@ -15,218 +16,15 @@ const NODE_PAD: usize = 4;
 /// Blank cells between two layers, along the flow.
 const GAP_ALONG_VERTICAL: usize = 3;
 const GAP_ALONG_HORIZONTAL: usize = 5;
+/// Cells added to the width of an edge label to get the gap that holds it.
+const LABEL_ROOM: usize = 4;
+/// Rows added to a vertical gap that holds an edge label.
+const LABEL_ROWS: usize = 2;
 /// Blank cells between two nodes of a layer.
 const GAP_ACROSS_VERTICAL: usize = 4;
 const GAP_ACROSS_HORIZONTAL: usize = 2;
 /// Passes of neighbour-average ordering over the layers.
 const ORDER_PASSES: usize = 2;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Direction {
-    TopDown,
-    BottomUp,
-    LeftRight,
-    RightLeft,
-}
-
-impl Direction {
-    fn parse(token: &str) -> Option<Direction> {
-        match token {
-            "TD" | "TB" => Some(Direction::TopDown),
-            "BT" => Some(Direction::BottomUp),
-            "LR" => Some(Direction::LeftRight),
-            "RL" => Some(Direction::RightLeft),
-            _ => None,
-        }
-    }
-
-    fn horizontal(self) -> bool {
-        matches!(self, Direction::LeftRight | Direction::RightLeft)
-    }
-
-    /// Direction in which edges between layers leave a node.
-    fn flow(self) -> Dir {
-        match self {
-            Direction::TopDown => Dir::S,
-            Direction::BottomUp => Dir::N,
-            Direction::LeftRight => Dir::E,
-            Direction::RightLeft => Dir::W,
-        }
-    }
-
-    /// Side used by edges that go back to an earlier layer.
-    fn side(self) -> Dir {
-        if self.horizontal() { Dir::S } else { Dir::E }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Shape {
-    Rect,
-    Round,
-    Diamond,
-}
-
-/// Opening and closing delimiters of the node shapes, longest opening first.
-const SHAPES: [(&str, &str, Shape); 9] = [
-    ("((", "))", Shape::Round),
-    ("([", "])", Shape::Round),
-    ("[[", "]]", Shape::Rect),
-    ("[(", ")]", Shape::Rect),
-    ("{{", "}}", Shape::Rect),
-    ("[", "]", Shape::Rect),
-    ("(", ")", Shape::Round),
-    ("{", "}", Shape::Diamond),
-    (">", "]", Shape::Rect),
-];
-
-#[derive(Debug, PartialEq, Eq)]
-struct Node {
-    lines: Vec<String>,
-    shape: Shape,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-struct Edge {
-    from: usize,
-    to: usize,
-    arrow: bool,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Flow {
-    direction: Direction,
-    nodes: Vec<Node>,
-    edges: Vec<Edge>,
-}
-
-/// Parses a `graph` or `flowchart` block. `None` for another diagram type and for syntax that is
-/// not drawn.
-pub fn parse(src: &str) -> Option<Flow> {
-    let mut lines = src
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with("%%"));
-    let mut header = lines.next()?.trim_end_matches(';').split_whitespace();
-    if !matches!(header.next()?, "graph" | "flowchart") {
-        return None;
-    }
-    let direction = match header.next() {
-        Some(token) => Direction::parse(token)?,
-        None => Direction::TopDown,
-    };
-    if header.next().is_some() {
-        return None;
-    }
-    let mut flow = Flow {
-        direction,
-        nodes: Vec::new(),
-        edges: Vec::new(),
-    };
-    let mut ids: HashMap<String, usize> = HashMap::new();
-    for line in lines {
-        for statement in line.split(';').map(str::trim).filter(|s| !s.is_empty()) {
-            let word = statement.split_whitespace().next().unwrap_or("");
-            match word {
-                "style" | "classDef" | "class" | "linkStyle" | "click" => continue,
-                "subgraph" | "end" | "direction" => return None,
-                _ => {}
-            }
-            parse_statement(statement, &mut flow, &mut ids)?;
-        }
-    }
-    Some(flow)
-}
-
-/// One chain such as `A[Start] --> B --> C`.
-fn parse_statement(s: &str, flow: &mut Flow, ids: &mut HashMap<String, usize>) -> Option<()> {
-    let mut rest = s;
-    let mut pending: Option<(usize, bool)> = None;
-    loop {
-        let (node, after) = parse_node(rest, flow, ids)?;
-        if let Some((from, arrow)) = pending.take() {
-            flow.edges.push(Edge {
-                from,
-                to: node,
-                arrow,
-            });
-        }
-        rest = after.trim_start();
-        if rest.is_empty() {
-            return Some(());
-        }
-        let (arrow, after) = parse_edge(rest)?;
-        pending = Some((node, arrow));
-        rest = after.trim_start();
-    }
-}
-
-fn parse_node<'a>(
-    s: &'a str,
-    flow: &mut Flow,
-    ids: &mut HashMap<String, usize>,
-) -> Option<(usize, &'a str)> {
-    let end = s
-        .find(|c: char| !(c.is_alphanumeric() || c == '_'))
-        .unwrap_or(s.len());
-    let (id, mut rest) = s.split_at(end);
-    if id.is_empty() {
-        return None;
-    }
-    let mut shaped = None;
-    for (open, close, shape) in SHAPES {
-        if let Some(inner) = rest.strip_prefix(open) {
-            let (label, after) = parse_label(inner, close)?;
-            shaped = Some((label, shape));
-            rest = after;
-            break;
-        }
-    }
-    let index = *ids.entry(id.to_string()).or_insert_with(|| {
-        flow.nodes.push(Node {
-            lines: vec![id.to_string()],
-            shape: Shape::Rect,
-        });
-        flow.nodes.len() - 1
-    });
-    if let Some((lines, shape)) = shaped.filter(|(lines, _)| !lines.is_empty()) {
-        flow.nodes[index] = Node { lines, shape };
-    }
-    Some((index, rest))
-}
-
-/// Splits `s` at the delimiter `close`, ignoring one inside double quotes. Returns the label as
-/// lines, `<br>` starting a new one, and the text after the delimiter.
-fn parse_label<'a>(s: &'a str, close: &str) -> Option<(Vec<String>, &'a str)> {
-    let s = s.trim_start();
-    let (text, after) = if let Some(quoted) = s.strip_prefix('"') {
-        let end = quoted.find('"')?;
-        let after = quoted[end + 1..].trim_start().strip_prefix(close)?;
-        (&quoted[..end], after)
-    } else {
-        let end = s.find(close)?;
-        (&s[..end], &s[end + close.len()..])
-    };
-    let text = text
-        .replace("<br/>", "\n")
-        .replace("<br />", "\n")
-        .replace("<br>", "\n");
-    let lines = text
-        .lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty())
-        .collect();
-    Some((lines, after))
-}
-
-/// Returns whether the edge ends with an arrow head, and the text after it.
-fn parse_edge(s: &str) -> Option<(bool, &str)> {
-    if let Some(rest) = s.strip_prefix("-->") {
-        Some((true, rest))
-    } else {
-        s.strip_prefix("---").map(|rest| (false, rest))
-    }
-}
 
 struct Placed {
     x: usize,
@@ -362,13 +160,79 @@ fn layers(flow: &Flow, back: &[bool], rank: &[usize]) -> Vec<Vec<usize>> {
     layers
 }
 
-/// Places the nodes layer by layer. Returns the boxes and the size of the layout.
-fn place(flow: &Flow, layers: &[Vec<usize>]) -> (Vec<Placed>, usize, usize) {
+/// Blank cells after each layer. A gap holds the label of an edge to the next layer: horizontal
+/// flows widen it by the label width, vertical flows by `LABEL_ROWS` rows.
+fn gaps(flow: &Flow, back: &[bool], rank: &[usize], depth: usize) -> Vec<usize> {
     let horizontal = flow.direction.horizontal();
-    let (gap_along, gap_across) = if horizontal {
-        (GAP_ALONG_HORIZONTAL, GAP_ACROSS_HORIZONTAL)
+    let base = if horizontal {
+        GAP_ALONG_HORIZONTAL
     } else {
-        (GAP_ALONG_VERTICAL, GAP_ACROSS_VERTICAL)
+        GAP_ALONG_VERTICAL
+    };
+    let mut gaps = vec![base; depth.saturating_sub(1)];
+    for (e, edge) in flow.edges.iter().enumerate() {
+        if let (Some(label), false) = (&edge.label, back[e]) {
+            let r = rank[edge.from];
+            gaps[r] = gaps[r].max(if horizontal {
+                display_width(label) + LABEL_ROOM
+            } else {
+                base + LABEL_ROWS
+            });
+        }
+    }
+    gaps
+}
+
+/// Writes `label` beside the longest straight run of `path` that has room for it.
+fn place_label(canvas: &mut Canvas, path: &[(usize, usize)], label: &str) -> bool {
+    let width = display_width(label);
+    let mut runs: Vec<&[(usize, usize)]> = Vec::new();
+    let mut start = 0;
+    for i in 1..path.len() {
+        let turns = i + 1 < path.len()
+            && Dir::between(path[i - 1], path[i]) != Dir::between(path[i], path[i + 1]);
+        if turns || i + 1 == path.len() {
+            runs.push(&path[start..=i]);
+            start = i;
+        }
+    }
+    runs.sort_by_key(|r| std::cmp::Reverse(r.len()));
+    for run in runs {
+        let (first, last) = (run[0], run[run.len() - 1]);
+        let candidates: Vec<(usize, usize)> = if first.1 == last.1 {
+            let lo = first.0.min(last.0);
+            let x = if width <= run.len() {
+                lo + (run.len() - width) / 2
+            } else {
+                lo
+            };
+            vec![(x, first.1.wrapping_sub(1)), (x, first.1 + 1)]
+        } else {
+            let y = (first.1 + last.1) / 2;
+            vec![(first.0 + 2, y), (first.0.wrapping_sub(1 + width), y)]
+        };
+        for (x, y) in candidates {
+            let fits = x
+                .checked_add(width)
+                .is_some_and(|end| end <= canvas.width())
+                && y < canvas.height()
+                && (x..x + width).all(|cx| canvas.is_empty(cx, y));
+            if fits {
+                canvas.text(x, y, label);
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Places the nodes layer by layer. Returns the boxes and the size of the layout.
+fn place(flow: &Flow, layers: &[Vec<usize>], gaps: &[usize]) -> (Vec<Placed>, usize, usize) {
+    let horizontal = flow.direction.horizontal();
+    let gap_across = if horizontal {
+        GAP_ACROSS_HORIZONTAL
+    } else {
+        GAP_ACROSS_VERTICAL
     };
     let sizes: Vec<(usize, usize)> = flow
         .nodes
@@ -391,7 +255,7 @@ fn place(flow: &Flow, layers: &[Vec<usize>]) -> (Vec<Placed>, usize, usize) {
         })
         .collect();
     let total_across = widths.iter().copied().max().unwrap_or(0);
-    let total_along = spans.iter().sum::<usize>() + gap_along * layers.len().saturating_sub(1);
+    let total_along = spans.iter().sum::<usize>() + gaps.iter().sum::<usize>();
     let mirrored = matches!(flow.direction, Direction::BottomUp | Direction::RightLeft);
     let mut placed: Vec<Placed> = sizes
         .iter()
@@ -414,7 +278,7 @@ fn place(flow: &Flow, layers: &[Vec<usize>]) -> (Vec<Placed>, usize, usize) {
             placed[v].y = y + MARGIN;
             cross += across(v) + gap_across;
         }
-        offset += spans[r] + gap_along;
+        offset += spans[r] + gaps.get(r).copied().unwrap_or(0);
     }
     let (w, h) = if horizontal {
         (total_along, total_across)
@@ -432,7 +296,8 @@ pub fn draw(flow: &Flow, width: usize, opts: &RenderOptions) -> Option<Vec<Line>
     let back = back_edges(flow)?;
     let rank = ranks(flow, &back);
     let layers = layers(flow, &back, &rank);
-    let (placed, w, h) = place(flow, &layers);
+    let gaps = gaps(flow, &back, &rank, layers.len());
+    let (placed, w, h) = place(flow, &layers, &gaps);
     let (cw, ch) = (w + 2 * MARGIN, h + 2 * MARGIN);
     let mut canvas = Canvas::new(cw, ch);
     let mut blocked = Blocked::new(cw, ch);
@@ -487,7 +352,7 @@ pub fn draw(flow: &Flow, width: usize, opts: &RenderOptions) -> Option<Vec<Line>
             in_side.step(target),
             arrive,
         )?;
-        canvas.add_lines(source.0, source.1, out.bit());
+        canvas.add_lines(source.0, source.1, out.bit(), Weight::Normal);
         let last = path.len() - 1;
         for (i, &cell) in path.iter().enumerate() {
             let before = if i == 0 {
@@ -497,20 +362,21 @@ pub fn draw(flow: &Flow, width: usize, opts: &RenderOptions) -> Option<Vec<Line>
             };
             if i < last {
                 let after = Dir::between(cell, path[i + 1]);
-                canvas.add_lines(cell.0, cell.1, before.bit() | after.bit());
+                canvas.add_lines(cell.0, cell.1, before.bit() | after.bit(), edge.weight);
             } else if edge.arrow {
                 canvas.set_glyph(cell.0, cell.1, opts.glyphs.arrows[arrive.index()]);
             } else {
-                canvas.add_lines(cell.0, cell.1, before.bit() | arrive.bit());
-                canvas.add_lines(target.0, target.1, in_side.bit());
+                canvas.add_lines(cell.0, cell.1, before.bit() | arrive.bit(), edge.weight);
+                canvas.add_lines(target.0, target.1, in_side.bit(), Weight::Normal);
             }
         }
+        if let Some(label) = &edge.label
+            && !place_label(&mut canvas, &path, label)
+        {
+            return None;
+        }
     }
-    let lines = canvas.into_lines(
-        &opts.glyphs.borders,
-        opts.theme.table_border,
-        opts.theme.base,
-    );
+    let lines = canvas.into_lines(&opts.glyphs, opts.theme.table_border, opts.theme.base);
     if lines.iter().any(|l| segments_width(l) > width) {
         return None;
     }
@@ -520,6 +386,7 @@ pub fn draw(flow: &Flow, width: usize, opts: &RenderOptions) -> Option<Vec<Line>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mermaid::parse::parse;
 
     fn draw_plain(src: &str, width: usize) -> Option<String> {
         let flow = parse(src)?;
@@ -533,38 +400,32 @@ mod tests {
     }
 
     #[test]
-    fn parses_a_chain() {
-        let flow = parse("graph LR\n  A[Start] --> B --- C;\n  B --> A\n").unwrap();
-        assert_eq!(flow.direction, Direction::LeftRight);
-        assert_eq!(flow.nodes.len(), 3);
-        assert_eq!(flow.nodes[0].lines, ["Start"]);
-        assert_eq!(flow.nodes[1].lines, ["B"]);
-        assert_eq!(flow.edges.len(), 3);
-        assert!(flow.edges[0].arrow && !flow.edges[1].arrow);
-    }
-
-    #[test]
-    fn rejects_other_diagrams_and_unsupported_syntax() {
-        assert!(parse("sequenceDiagram\n A->>B: x").is_none());
-        assert!(parse("graph TD\n A --> B\n subgraph s\n end").is_none());
-        assert!(parse("graph TD\n A[x --> B").is_none());
-        assert!(parse("graph XX\n A --> B").is_none());
-    }
-
-    #[test]
-    fn parses_shapes_and_labels() {
-        let flow = parse("graph TD\n A([Go]) --> B{\"Is it?\"} --> C[a<br/>b]\n").unwrap();
-        assert_eq!(flow.nodes[0].shape, Shape::Round);
-        assert_eq!(flow.nodes[1].shape, Shape::Diamond);
-        assert_eq!(flow.nodes[1].lines, ["Is it?"]);
-        assert_eq!(flow.nodes[2].lines, ["a", "b"]);
-    }
-
-    #[test]
     fn shapes_change_the_corners() {
         let art = draw_plain("graph TD\n A(x) --> B{y}\n", 40).unwrap();
         assert!(art.contains(".---."), "{art}");
         assert!(art.contains("/---\\"), "{art}");
+    }
+
+    #[test]
+    fn edge_label_is_written_next_to_the_edge() {
+        let art = draw_plain("graph LR\n A -->|ok| B\n", 40).unwrap();
+        assert_eq!(
+            art,
+            "+---+  ok  +---+\n| A +----->| B |\n+---+      +---+\n"
+        );
+    }
+
+    #[test]
+    fn dotted_and_thick_edges_use_their_own_glyphs() {
+        let dotted = draw_plain("graph LR\n A -.-> B\n", 40).unwrap();
+        assert!(dotted.contains("....>"), "{dotted}");
+        let thick = draw_plain("graph LR\n A ==> B\n", 40).unwrap();
+        assert!(thick.contains("====>"), "{thick}");
+    }
+
+    #[test]
+    fn label_without_room_falls_back() {
+        assert!(draw_plain("graph TD\n A -->|a very long label| B\n", 12).is_none());
     }
 
     #[test]

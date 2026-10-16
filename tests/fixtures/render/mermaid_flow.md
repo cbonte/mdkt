@@ -28,3 +28,10 @@ graph TD
   B --> C["Run<br/>twice"]
   B --> D(Stop)
 ```
+
+Edges:
+
+```mermaid
+graph LR
+  A -->|go| B -.->|ask| C ==> D
+```
