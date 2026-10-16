@@ -19,3 +19,12 @@ Not drawn:
 pie
   "a" : 1
 ```
+
+Shapes:
+
+```mermaid
+graph TD
+  A([Start]) --> B{Ok?}
+  B --> C["Run<br/>twice"]
+  B --> D(Stop)
+```

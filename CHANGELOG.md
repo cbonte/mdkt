@@ -3,6 +3,7 @@
 ## Added
 
 - cat: draw Mermaid flowcharts as text.
+- cat: draw Mermaid rounded and diamond nodes and multi-line labels.
 
 # 0.1.0 - 2026-10-16
 

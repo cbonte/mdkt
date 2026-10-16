@@ -41,6 +41,9 @@ pub struct Glyphs {
     pub ellipsis: String,
     /// Arrow heads pointing north, east, south and west.
     pub arrows: [char; 4],
+    /// Corners of rounded and diamond nodes: top left, top right, bottom left, bottom right.
+    pub rounded: [char; 4],
+    pub diamond: [char; 4],
     pub task_done: String,
     pub task_todo: String,
 }
@@ -54,6 +57,8 @@ impl Glyphs {
             borders: UNICODE_BORDERS,
             ellipsis: "\u{2026}".into(),
             arrows: ['\u{25b2}', '\u{25ba}', '\u{25bc}', '\u{25c4}'],
+            rounded: ['\u{256d}', '\u{256e}', '\u{2570}', '\u{256f}'],
+            diamond: ['\u{2571}', '\u{2572}', '\u{2572}', '\u{2571}'],
             task_done: "[\u{2713}] ".into(),
             task_todo: "[ ] ".into(),
         }
@@ -67,6 +72,8 @@ impl Glyphs {
             borders: ASCII_BORDERS,
             ellipsis: "...".into(),
             arrows: ['^', '>', 'v', '<'],
+            rounded: ['.', '.', '\'', '\''],
+            diamond: ['/', '\\', '\\', '/'],
             task_done: "[x] ".into(),
             task_todo: "[ ] ".into(),
         }

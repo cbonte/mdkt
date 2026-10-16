@@ -6,13 +6,12 @@ use super::canvas::{Canvas, Dir};
 use super::route::{Blocked, route};
 use crate::model::Line;
 use crate::options::RenderOptions;
-use crate::wrap::segments_width;
+use crate::wrap::{display_width, segments_width};
 
 /// Blank cells kept around the layout so that edges can route around the outer nodes.
 const MARGIN: usize = 2;
 /// Border plus one blank cell on each side of a label.
 const NODE_PAD: usize = 4;
-const NODE_HEIGHT: usize = 3;
 /// Blank cells between two layers, along the flow.
 const GAP_ALONG_VERTICAL: usize = 3;
 const GAP_ALONG_HORIZONTAL: usize = 5;
@@ -61,9 +60,30 @@ impl Direction {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Shape {
+    Rect,
+    Round,
+    Diamond,
+}
+
+/// Opening and closing delimiters of the node shapes, longest opening first.
+const SHAPES: [(&str, &str, Shape); 9] = [
+    ("((", "))", Shape::Round),
+    ("([", "])", Shape::Round),
+    ("[[", "]]", Shape::Rect),
+    ("[(", ")]", Shape::Rect),
+    ("{{", "}}", Shape::Rect),
+    ("[", "]", Shape::Rect),
+    ("(", ")", Shape::Round),
+    ("{", "}", Shape::Diamond),
+    (">", "]", Shape::Rect),
+];
+
 #[derive(Debug, PartialEq, Eq)]
 struct Node {
-    label: String,
+    lines: Vec<String>,
+    shape: Shape,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -153,22 +173,50 @@ fn parse_node<'a>(
     if id.is_empty() {
         return None;
     }
-    let mut label = None;
-    if let Some(inner) = rest.strip_prefix('[') {
-        let close = inner.find(']')?;
-        label = Some(inner[..close].trim().trim_matches('"').to_string());
-        rest = &inner[close + 1..];
+    let mut shaped = None;
+    for (open, close, shape) in SHAPES {
+        if let Some(inner) = rest.strip_prefix(open) {
+            let (label, after) = parse_label(inner, close)?;
+            shaped = Some((label, shape));
+            rest = after;
+            break;
+        }
     }
     let index = *ids.entry(id.to_string()).or_insert_with(|| {
         flow.nodes.push(Node {
-            label: id.to_string(),
+            lines: vec![id.to_string()],
+            shape: Shape::Rect,
         });
         flow.nodes.len() - 1
     });
-    if let Some(label) = label.filter(|l| !l.is_empty()) {
-        flow.nodes[index].label = label;
+    if let Some((lines, shape)) = shaped.filter(|(lines, _)| !lines.is_empty()) {
+        flow.nodes[index] = Node { lines, shape };
     }
     Some((index, rest))
+}
+
+/// Splits `s` at the delimiter `close`, ignoring one inside double quotes. Returns the label as
+/// lines, `<br>` starting a new one, and the text after the delimiter.
+fn parse_label<'a>(s: &'a str, close: &str) -> Option<(Vec<String>, &'a str)> {
+    let s = s.trim_start();
+    let (text, after) = if let Some(quoted) = s.strip_prefix('"') {
+        let end = quoted.find('"')?;
+        let after = quoted[end + 1..].trim_start().strip_prefix(close)?;
+        (&quoted[..end], after)
+    } else {
+        let end = s.find(close)?;
+        (&s[..end], &s[end + close.len()..])
+    };
+    let text = text
+        .replace("<br/>", "\n")
+        .replace("<br />", "\n")
+        .replace("<br>", "\n");
+    let lines = text
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+    Some((lines, after))
 }
 
 /// Returns whether the edge ends with an arrow head, and the text after it.
@@ -325,7 +373,10 @@ fn place(flow: &Flow, layers: &[Vec<usize>]) -> (Vec<Placed>, usize, usize) {
     let sizes: Vec<(usize, usize)> = flow
         .nodes
         .iter()
-        .map(|n| (label_width(&n.label) + NODE_PAD, NODE_HEIGHT))
+        .map(|n| {
+            let text = n.lines.iter().map(|l| display_width(l)).max().unwrap_or(0);
+            (text + NODE_PAD, n.lines.len() + 2)
+        })
         .collect();
     let along = |v: usize| if horizontal { sizes[v].0 } else { sizes[v].1 };
     let across = |v: usize| if horizontal { sizes[v].1 } else { sizes[v].0 };
@@ -373,10 +424,6 @@ fn place(flow: &Flow, layers: &[Vec<usize>]) -> (Vec<Placed>, usize, usize) {
     (placed, w, h)
 }
 
-fn label_width(label: &str) -> usize {
-    crate::wrap::display_width(label)
-}
-
 /// Draws the flowchart within `width` columns. `None` when it does not fit or cannot be routed.
 pub fn draw(flow: &Flow, width: usize, opts: &RenderOptions) -> Option<Vec<Line>> {
     if flow.nodes.is_empty() {
@@ -391,7 +438,21 @@ pub fn draw(flow: &Flow, width: usize, opts: &RenderOptions) -> Option<Vec<Line>
     let mut blocked = Blocked::new(cw, ch);
     for (node, p) in flow.nodes.iter().zip(&placed) {
         canvas.draw_box(p.x, p.y, p.w, p.h);
-        canvas.text(p.x + 2, p.y + p.h / 2, &node.label);
+        let corners = match node.shape {
+            Shape::Rect => None,
+            Shape::Round => Some(opts.glyphs.rounded),
+            Shape::Diamond => Some(opts.glyphs.diamond),
+        };
+        if let Some([tl, tr, bl, br]) = corners {
+            canvas.set_glyph(p.x, p.y, tl);
+            canvas.set_glyph(p.x + p.w - 1, p.y, tr);
+            canvas.set_glyph(p.x, p.y + p.h - 1, bl);
+            canvas.set_glyph(p.x + p.w - 1, p.y + p.h - 1, br);
+        }
+        for (i, line) in node.lines.iter().enumerate() {
+            let pad = (p.w - 2 - display_width(line)) / 2;
+            canvas.text(p.x + 1 + pad, p.y + 1 + i, line);
+        }
         blocked.block_rect(p.x, p.y, p.w, p.h);
     }
     let flow_dir = flow.direction.flow();
@@ -476,8 +537,8 @@ mod tests {
         let flow = parse("graph LR\n  A[Start] --> B --- C;\n  B --> A\n").unwrap();
         assert_eq!(flow.direction, Direction::LeftRight);
         assert_eq!(flow.nodes.len(), 3);
-        assert_eq!(flow.nodes[0].label, "Start");
-        assert_eq!(flow.nodes[1].label, "B");
+        assert_eq!(flow.nodes[0].lines, ["Start"]);
+        assert_eq!(flow.nodes[1].lines, ["B"]);
         assert_eq!(flow.edges.len(), 3);
         assert!(flow.edges[0].arrow && !flow.edges[1].arrow);
     }
@@ -486,8 +547,24 @@ mod tests {
     fn rejects_other_diagrams_and_unsupported_syntax() {
         assert!(parse("sequenceDiagram\n A->>B: x").is_none());
         assert!(parse("graph TD\n A --> B\n subgraph s\n end").is_none());
-        assert!(parse("graph TD\n A((x)) --> B").is_none());
+        assert!(parse("graph TD\n A[x --> B").is_none());
         assert!(parse("graph XX\n A --> B").is_none());
+    }
+
+    #[test]
+    fn parses_shapes_and_labels() {
+        let flow = parse("graph TD\n A([Go]) --> B{\"Is it?\"} --> C[a<br/>b]\n").unwrap();
+        assert_eq!(flow.nodes[0].shape, Shape::Round);
+        assert_eq!(flow.nodes[1].shape, Shape::Diamond);
+        assert_eq!(flow.nodes[1].lines, ["Is it?"]);
+        assert_eq!(flow.nodes[2].lines, ["a", "b"]);
+    }
+
+    #[test]
+    fn shapes_change_the_corners() {
+        let art = draw_plain("graph TD\n A(x) --> B{y}\n", 40).unwrap();
+        assert!(art.contains(".---."), "{art}");
+        assert!(art.contains("/---\\"), "{art}");
     }
 
     #[test]
