@@ -2,8 +2,8 @@
 
 use std::collections::HashMap;
 
-use super::canvas::{Canvas, Dir, Weight};
-use super::parse::{Direction, Flow, Shape};
+use super::canvas::{Canvas, Dir, E, N, S, W, Weight};
+use super::parse::{Direction, Flow, Node, Shape};
 use super::route::{Blocked, route};
 use crate::model::Line;
 use crate::options::RenderOptions;
@@ -23,6 +23,12 @@ const LABEL_ROWS: usize = 2;
 /// Blank cells between two nodes of a layer.
 const GAP_ACROSS_VERTICAL: usize = 4;
 const GAP_ACROSS_HORIZONTAL: usize = 2;
+/// Left and right points of a diamond node, on the row of its port.
+const DIAMOND_SIDES: [char; 2] = ['<', '>'];
+/// Cells between the left edge of a diamond and the first cell of its top and bottom edges.
+const DIAMOND_INSET: usize = 3;
+/// Rows of a diamond above and below its text.
+const DIAMOND_SLANT: usize = 2;
 /// Passes of neighbour-average ordering over the layers.
 const ORDER_PASSES: usize = 2;
 
@@ -31,24 +37,40 @@ struct Placed {
     y: usize,
     w: usize,
     h: usize,
+    diamond: bool,
 }
 
 impl Placed {
+    /// Columns of the top and bottom border where an edge may attach.
+    fn columns(&self) -> (usize, usize) {
+        let inset = if self.diamond { DIAMOND_INSET } else { 1 };
+        (self.x + inset, (self.x + self.w).saturating_sub(inset + 1))
+    }
+
+    /// Rows of the left and right border where an edge may attach.
+    fn rows(&self) -> (usize, usize) {
+        if self.diamond {
+            (self.y + self.h / 2, self.y + self.h / 2)
+        } else {
+            (self.y + 1, (self.y + self.h).saturating_sub(2))
+        }
+    }
+
     /// Cell of the border on `side` where an edge attaches. With `other`, the middle of the span the
     /// two boxes share along that border when there is one, so that the edge runs straight;
     /// without, the middle of the border.
     fn port(&self, side: Dir, other: Option<&Placed>) -> (usize, usize) {
-        let span = |start: usize, len: usize, o_start: usize, o_len: usize| {
-            let lo = start.max(o_start) + 1;
-            let hi = (start + len).min(o_start + o_len).saturating_sub(2);
-            if lo <= hi {
-                (lo + hi) / 2
-            } else {
-                start + len / 2
-            }
+        let span = |own: (usize, usize), theirs: (usize, usize), middle: usize| {
+            let (lo, hi) = (own.0.max(theirs.0), own.1.min(theirs.1));
+            if lo <= hi { (lo + hi) / 2 } else { middle }
         };
-        let col = other.map_or(self.x + self.w / 2, |o| span(self.x, self.w, o.x, o.w));
-        let row = other.map_or(self.y + self.h / 2, |o| span(self.y, self.h, o.y, o.h));
+        let col = other.map_or(self.x + self.w / 2, |o| {
+            span(self.columns(), o.columns(), self.x + self.w / 2)
+        });
+        let row = other.map_or(self.y + self.h / 2, |o| {
+            span(self.rows(), o.rows(), self.y + self.h / 2)
+        });
+        let row = if self.diamond { self.rows().0 } else { row };
         match side {
             Dir::N => (col, self.y),
             Dir::S => (col, self.y + self.h - 1),
@@ -239,7 +261,11 @@ fn place(flow: &Flow, layers: &[Vec<usize>], gaps: &[usize]) -> (Vec<Placed>, us
         .iter()
         .map(|n| {
             let text = n.lines.iter().map(|l| display_width(l)).max().unwrap_or(0);
-            (text + NODE_PAD, n.lines.len() + 2)
+            if n.shape == Shape::Diamond {
+                (text + 2 * DIAMOND_INSET, n.lines.len() + 2 * DIAMOND_SLANT)
+            } else {
+                (text + NODE_PAD, n.lines.len() + 2)
+            }
         })
         .collect();
     let along = |v: usize| if horizontal { sizes[v].0 } else { sizes[v].1 };
@@ -259,7 +285,14 @@ fn place(flow: &Flow, layers: &[Vec<usize>], gaps: &[usize]) -> (Vec<Placed>, us
     let mirrored = matches!(flow.direction, Direction::BottomUp | Direction::RightLeft);
     let mut placed: Vec<Placed> = sizes
         .iter()
-        .map(|&(w, h)| Placed { x: 0, y: 0, w, h })
+        .zip(&flow.nodes)
+        .map(|(&(w, h), n)| Placed {
+            x: 0,
+            y: 0,
+            w,
+            h,
+            diamond: n.shape == Shape::Diamond,
+        })
         .collect();
     let mut offset = 0;
     for (r, layer) in layers.iter().enumerate() {
@@ -288,6 +321,57 @@ fn place(flow: &Flow, layers: &[Vec<usize>], gaps: &[usize]) -> (Vec<Placed>, us
     (placed, w, h)
 }
 
+/// Draws a node: its border, whose corners depend on the shape, and its label.
+fn draw_node(canvas: &mut Canvas, node: &Node, p: &Placed, opts: &RenderOptions) {
+    if node.shape == Shape::Diamond {
+        return draw_diamond(canvas, node, p, opts);
+    }
+    canvas.draw_box(p.x, p.y, p.w, p.h);
+    if node.shape == Shape::Round {
+        let [tl, tr, bl, br] = opts.glyphs.rounded;
+        canvas.set_glyph(p.x, p.y, tl);
+        canvas.set_glyph(p.x + p.w - 1, p.y, tr);
+        canvas.set_glyph(p.x, p.y + p.h - 1, bl);
+        canvas.set_glyph(p.x + p.w - 1, p.y + p.h - 1, br);
+    }
+    for (i, line) in node.lines.iter().enumerate() {
+        let pad = (p.w - 2 - display_width(line)) / 2;
+        canvas.text(p.x + 1 + pad, p.y + 1 + i, line);
+    }
+}
+
+/// Draws a diamond: two slanted rows above and below the label, pointed on its row.
+fn draw_diamond(canvas: &mut Canvas, node: &Node, p: &Placed, opts: &RenderOptions) {
+    let [tl, tr, bl, br] = opts.glyphs.diamond;
+    let (left, right) = (p.x, p.x + p.w - 1);
+    let (top, bottom) = (p.y, p.y + p.h - 1);
+    for x in left + DIAMOND_INSET..right + 1 - DIAMOND_INSET {
+        canvas.add_lines(x, top, E | W, Weight::Normal);
+        canvas.add_lines(x, bottom, E | W, Weight::Normal);
+    }
+    canvas.set_glyph(left + 2, top, tl);
+    canvas.set_glyph(right - 2, top, tr);
+    canvas.set_glyph(left + 2, bottom, bl);
+    canvas.set_glyph(right - 2, bottom, br);
+    canvas.set_glyph(left + 1, top + 1, tl);
+    canvas.set_glyph(right - 1, top + 1, tr);
+    canvas.set_glyph(left + 1, bottom - 1, bl);
+    canvas.set_glyph(right - 1, bottom - 1, br);
+    let tip = p.rows().0;
+    for (i, line) in node.lines.iter().enumerate() {
+        let y = top + DIAMOND_SLANT + i;
+        if y == tip {
+            canvas.set_glyph(left, y, DIAMOND_SIDES[0]);
+            canvas.set_glyph(right, y, DIAMOND_SIDES[1]);
+        } else {
+            canvas.add_lines(left, y, N | S, Weight::Normal);
+            canvas.add_lines(right, y, N | S, Weight::Normal);
+        }
+        let pad = (p.w - 2 * DIAMOND_INSET - display_width(line)) / 2;
+        canvas.text(left + DIAMOND_INSET + pad, y, line);
+    }
+}
+
 /// Draws the flowchart within `width` columns. `None` when it does not fit or cannot be routed.
 pub fn draw(flow: &Flow, width: usize, opts: &RenderOptions) -> Option<Vec<Line>> {
     if flow.nodes.is_empty() {
@@ -302,22 +386,7 @@ pub fn draw(flow: &Flow, width: usize, opts: &RenderOptions) -> Option<Vec<Line>
     let mut canvas = Canvas::new(cw, ch);
     let mut blocked = Blocked::new(cw, ch);
     for (node, p) in flow.nodes.iter().zip(&placed) {
-        canvas.draw_box(p.x, p.y, p.w, p.h);
-        let corners = match node.shape {
-            Shape::Rect => None,
-            Shape::Round => Some(opts.glyphs.rounded),
-            Shape::Diamond => Some(opts.glyphs.diamond),
-        };
-        if let Some([tl, tr, bl, br]) = corners {
-            canvas.set_glyph(p.x, p.y, tl);
-            canvas.set_glyph(p.x + p.w - 1, p.y, tr);
-            canvas.set_glyph(p.x, p.y + p.h - 1, bl);
-            canvas.set_glyph(p.x + p.w - 1, p.y + p.h - 1, br);
-        }
-        for (i, line) in node.lines.iter().enumerate() {
-            let pad = (p.w - 2 - display_width(line)) / 2;
-            canvas.text(p.x + 1 + pad, p.y + 1 + i, line);
-        }
+        draw_node(&mut canvas, node, p, opts);
         blocked.block_rect(p.x, p.y, p.w, p.h);
     }
     let flow_dir = flow.direction.flow();
@@ -403,7 +472,12 @@ mod tests {
     fn shapes_change_the_corners() {
         let art = draw_plain("graph TD\n A(x) --> B{y}\n", 40).unwrap();
         assert!(art.contains(".---."), "{art}");
-        assert!(art.contains("/---\\"), "{art}");
+    }
+
+    #[test]
+    fn diamond_has_slanted_sides_and_pointed_tips() {
+        let art = draw_plain("graph TD\n B{yes}\n", 40).unwrap();
+        assert_eq!(art, "  /---\\\n /     \\\n<  yes  >\n \\     /\n  \\---/\n");
     }
 
     #[test]
