@@ -16,8 +16,8 @@ flowchart LR
 Not drawn:
 
 ```mermaid
-pie
-  "a" : 1
+gantt
+  title Plan
 ```
 
 Shapes:

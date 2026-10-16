@@ -47,6 +47,8 @@ pub struct Glyphs {
     /// Frame for thick edges, and the horizontal and vertical characters of dotted ones.
     pub thick: Borders,
     pub dotted: [char; 2],
+    /// One cell of a chart bar.
+    pub bar: char,
     pub task_done: String,
     pub task_todo: String,
 }
@@ -64,6 +66,7 @@ impl Glyphs {
             diamond: ['\u{2571}', '\u{2572}', '\u{2572}', '\u{2571}'],
             thick: THICK_BORDERS,
             dotted: ['\u{2504}', '\u{2506}'],
+            bar: '\u{2588}',
             task_done: "[\u{2713}] ".into(),
             task_todo: "[ ] ".into(),
         }
@@ -81,6 +84,7 @@ impl Glyphs {
             diamond: ['/', '\\', '\\', '/'],
             thick: ASCII_THICK_BORDERS,
             dotted: ['.', ':'],
+            bar: '#',
             task_done: "[x] ".into(),
             task_todo: "[ ] ".into(),
         }

@@ -1,0 +1,6 @@
+```mermaid
+pie showData title Pets
+  "Dogs" : 386
+  "Cats" : 85
+  "Rats" : 15
+```

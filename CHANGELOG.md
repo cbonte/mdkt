@@ -7,6 +7,7 @@
 - cat: draw Mermaid edge labels and dotted and thick edges.
 - cat: draw Mermaid sequence diagrams as text.
 - cat: show Mermaid blocks as code on request.
+- cat: draw Mermaid pie charts as bars.
 
 # 0.1.0 - 2026-10-16
 

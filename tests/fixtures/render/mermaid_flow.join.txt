@@ -24,8 +24,8 @@ Left to right:
 
 Not drawn:
 
-  pie
-    "a" : 1
+  gantt
+    title Plan
 
 Shapes:
 

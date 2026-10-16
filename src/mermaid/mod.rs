@@ -3,6 +3,7 @@
 mod canvas;
 mod flow;
 mod parse;
+mod pie;
 mod route;
 mod sequence;
 
@@ -18,6 +19,9 @@ pub fn render(code: &str, width: usize, opts: &RenderOptions) -> Option<Vec<Line
         .find(|l| !l.is_empty() && !l.starts_with("%%"))?;
     if first.trim_end_matches(';') == "sequenceDiagram" {
         return sequence::render(code, width, opts);
+    }
+    if first.split_whitespace().next() == Some("pie") {
+        return pie::render(code, width, opts);
     }
     let flow = parse::parse(code)?;
     flow::draw(&flow, width, opts)
