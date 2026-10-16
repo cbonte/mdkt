@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use super::canvas::{Canvas, Dir, E, N, S, W, Weight};
-use super::parse::{Direction, Flow, Node, Shape};
+use super::graph::{Direction, Flow, Head, Node, Shape};
 use super::route::{Blocked, route};
 use crate::model::Line;
 use crate::options::RenderOptions;
@@ -219,29 +219,35 @@ fn place_label(canvas: &mut Canvas, path: &[(usize, usize)], label: &str) -> boo
         }
     }
     runs.sort_by_key(|r| std::cmp::Reverse(r.len()));
-    for run in runs {
-        let (first, last) = (run[0], run[run.len() - 1]);
-        let candidates: Vec<(usize, usize)> = if first.1 == last.1 {
-            let lo = first.0.min(last.0);
-            let x = if width <= run.len() {
-                lo + (run.len() - width) / 2
+    // First with a blank cell on each side of the label, then without.
+    for margin in [1, 0] {
+        for run in &runs {
+            let (first, last) = (run[0], run[run.len() - 1]);
+            let candidates: Vec<(usize, usize)> = if first.1 == last.1 {
+                let lo = first.0.min(last.0);
+                let x = if width <= run.len() {
+                    lo + (run.len() - width) / 2
+                } else {
+                    lo
+                };
+                vec![(x, first.1.wrapping_sub(1)), (x, first.1 + 1)]
             } else {
-                lo
+                let y = (first.1 + last.1) / 2;
+                vec![
+                    (first.0 + 1 + margin, y),
+                    (first.0.wrapping_sub(width + margin), y),
+                ]
             };
-            vec![(x, first.1.wrapping_sub(1)), (x, first.1 + 1)]
-        } else {
-            let y = (first.1 + last.1) / 2;
-            vec![(first.0 + 2, y), (first.0.wrapping_sub(1 + width), y)]
-        };
-        for (x, y) in candidates {
-            let fits = x
-                .checked_add(width)
-                .is_some_and(|end| end <= canvas.width())
-                && y < canvas.height()
-                && (x..x + width).all(|cx| canvas.is_empty(cx, y));
-            if fits {
-                canvas.text(x, y, label);
-                return true;
+            for (x, y) in candidates {
+                let fits = x >= margin
+                    && x.checked_add(width + margin)
+                        .is_some_and(|end| end < canvas.width())
+                    && y < canvas.height()
+                    && (x - margin..x + width + margin).all(|cx| canvas.is_empty(cx, y));
+                if fits {
+                    canvas.text(x, y, label);
+                    return true;
+                }
             }
         }
     }
@@ -249,7 +255,12 @@ fn place_label(canvas: &mut Canvas, path: &[(usize, usize)], label: &str) -> boo
 }
 
 /// Places the nodes layer by layer. Returns the boxes and the size of the layout.
-fn place(flow: &Flow, layers: &[Vec<usize>], gaps: &[usize]) -> (Vec<Placed>, usize, usize) {
+fn place(
+    flow: &Flow,
+    texts: &[Vec<String>],
+    layers: &[Vec<usize>],
+    gaps: &[usize],
+) -> (Vec<Placed>, usize, usize) {
     let horizontal = flow.direction.horizontal();
     let gap_across = if horizontal {
         GAP_ACROSS_HORIZONTAL
@@ -259,12 +270,13 @@ fn place(flow: &Flow, layers: &[Vec<usize>], gaps: &[usize]) -> (Vec<Placed>, us
     let sizes: Vec<(usize, usize)> = flow
         .nodes
         .iter()
-        .map(|n| {
-            let text = n.lines.iter().map(|l| display_width(l)).max().unwrap_or(0);
+        .zip(texts)
+        .map(|(n, lines)| {
+            let text = lines.iter().map(|l| display_width(l)).max().unwrap_or(0);
             if n.shape == Shape::Diamond {
-                (text + 2 * DIAMOND_INSET, n.lines.len() + 2 * DIAMOND_SLANT)
+                (text + 2 * DIAMOND_INSET, lines.len() + 2 * DIAMOND_SLANT)
             } else {
-                (text + NODE_PAD, n.lines.len() + 2)
+                (text + NODE_PAD, lines.len() + 2 + n.dividers.len())
             }
         })
         .collect();
@@ -321,27 +333,51 @@ fn place(flow: &Flow, layers: &[Vec<usize>], gaps: &[usize]) -> (Vec<Placed>, us
     (placed, w, h)
 }
 
-/// Draws a node: its border, whose corners depend on the shape, and its label.
-fn draw_node(canvas: &mut Canvas, node: &Node, p: &Placed, opts: &RenderOptions) {
+/// Text of a node: its lines, or the glyph of a start or end state.
+fn node_text(node: &Node, opts: &RenderOptions) -> Vec<String> {
+    match node.shape {
+        Shape::Start => vec![opts.glyphs.start_state.clone()],
+        Shape::End => vec![opts.glyphs.end_state.clone()],
+        _ => node.lines.clone(),
+    }
+}
+
+/// Draws a node: its border, whose corners depend on the shape, and its text.
+fn draw_node(canvas: &mut Canvas, node: &Node, text: &[String], p: &Placed, opts: &RenderOptions) {
     if node.shape == Shape::Diamond {
-        return draw_diamond(canvas, node, p, opts);
+        return draw_diamond(canvas, text, p, opts);
     }
     canvas.draw_box(p.x, p.y, p.w, p.h);
-    if node.shape == Shape::Round {
+    if matches!(node.shape, Shape::Round | Shape::Start | Shape::End) {
         let [tl, tr, bl, br] = opts.glyphs.rounded;
         canvas.set_glyph(p.x, p.y, tl);
         canvas.set_glyph(p.x + p.w - 1, p.y, tr);
         canvas.set_glyph(p.x, p.y + p.h - 1, bl);
         canvas.set_glyph(p.x + p.w - 1, p.y + p.h - 1, br);
     }
-    for (i, line) in node.lines.iter().enumerate() {
-        let pad = (p.w - 2 - display_width(line)) / 2;
-        canvas.text(p.x + 1 + pad, p.y + 1 + i, line);
+    let first_divider = node.dividers.first().copied().unwrap_or(usize::MAX);
+    let mut y = p.y + 1;
+    for (i, line) in text.iter().enumerate() {
+        if node.dividers.contains(&i) {
+            canvas.add_lines(p.x, y, N | S | E, Weight::Normal);
+            canvas.add_lines(p.x + p.w - 1, y, N | S | W, Weight::Normal);
+            for x in p.x + 1..p.x + p.w - 1 {
+                canvas.add_lines(x, y, E | W, Weight::Normal);
+            }
+            y += 1;
+        }
+        let pad = if i < first_divider {
+            (p.w - 2 - display_width(line)) / 2
+        } else {
+            1
+        };
+        canvas.text(p.x + 1 + pad, y, line);
+        y += 1;
     }
 }
 
 /// Draws a diamond: two slanted rows above and below the label, pointed on its row.
-fn draw_diamond(canvas: &mut Canvas, node: &Node, p: &Placed, opts: &RenderOptions) {
+fn draw_diamond(canvas: &mut Canvas, text: &[String], p: &Placed, opts: &RenderOptions) {
     let [tl, tr, bl, br] = opts.glyphs.diamond;
     let (left, right) = (p.x, p.x + p.w - 1);
     let (top, bottom) = (p.y, p.y + p.h - 1);
@@ -358,7 +394,7 @@ fn draw_diamond(canvas: &mut Canvas, node: &Node, p: &Placed, opts: &RenderOptio
     canvas.set_glyph(left + 1, bottom - 1, bl);
     canvas.set_glyph(right - 1, bottom - 1, br);
     let tip = p.rows().0;
-    for (i, line) in node.lines.iter().enumerate() {
+    for (i, line) in text.iter().enumerate() {
         let y = top + DIAMOND_SLANT + i;
         if y == tip {
             canvas.set_glyph(left, y, DIAMOND_SIDES[0]);
@@ -372,6 +408,14 @@ fn draw_diamond(canvas: &mut Canvas, node: &Node, p: &Placed, opts: &RenderOptio
     }
 }
 
+/// The glyph of an edge end that points along `heading`, if the end has a head.
+fn head_glyph(head: Head, heading: Dir, opts: &RenderOptions) -> Option<char> {
+    match head {
+        Head::None => None,
+        Head::Arrow => Some(opts.glyphs.arrows[heading.index()]),
+    }
+}
+
 /// Draws the flowchart within `width` columns. `None` when it does not fit or cannot be routed.
 pub fn draw(flow: &Flow, width: usize, opts: &RenderOptions) -> Option<Vec<Line>> {
     if flow.nodes.is_empty() {
@@ -381,12 +425,26 @@ pub fn draw(flow: &Flow, width: usize, opts: &RenderOptions) -> Option<Vec<Line>
     let rank = ranks(flow, &back);
     let layers = layers(flow, &back, &rank);
     let gaps = gaps(flow, &back, &rank, layers.len());
-    let (placed, w, h) = place(flow, &layers, &gaps);
-    let (cw, ch) = (w + 2 * MARGIN, h + 2 * MARGIN);
+    let texts: Vec<Vec<String>> = flow.nodes.iter().map(|n| node_text(n, opts)).collect();
+    let (placed, w, h) = place(flow, &texts, &layers, &gaps);
+    // Labels of the edges going back are written beside the column that routes around the layout.
+    let room = if flow.direction.horizontal() {
+        0
+    } else {
+        flow.edges
+            .iter()
+            .zip(&back)
+            .filter(|(_, back)| **back)
+            .filter_map(|(edge, _)| edge.label.as_ref())
+            .map(|label| display_width(label) + 3)
+            .max()
+            .unwrap_or(0)
+    };
+    let (cw, ch) = (w + 2 * MARGIN + room, h + 2 * MARGIN);
     let mut canvas = Canvas::new(cw, ch);
     let mut blocked = Blocked::new(cw, ch);
-    for (node, p) in flow.nodes.iter().zip(&placed) {
-        draw_node(&mut canvas, node, p, opts);
+    for ((node, text), p) in flow.nodes.iter().zip(&texts).zip(&placed) {
+        draw_node(&mut canvas, node, text, p, opts);
         blocked.block_rect(p.x, p.y, p.w, p.h);
     }
     let flow_dir = flow.direction.flow();
@@ -432,12 +490,17 @@ pub fn draw(flow: &Flow, width: usize, opts: &RenderOptions) -> Option<Vec<Line>
             if i < last {
                 let after = Dir::between(cell, path[i + 1]);
                 canvas.add_lines(cell.0, cell.1, before.bit() | after.bit(), edge.weight);
-            } else if edge.arrow {
-                canvas.set_glyph(cell.0, cell.1, opts.glyphs.arrows[arrive.index()]);
+            } else if let Some(glyph) = head_glyph(edge.to_end, arrive, opts) {
+                canvas.set_glyph(cell.0, cell.1, glyph);
             } else {
                 canvas.add_lines(cell.0, cell.1, before.bit() | arrive.bit(), edge.weight);
                 canvas.add_lines(target.0, target.1, in_side.bit(), Weight::Normal);
             }
+        }
+        if let Some(glyph) = head_glyph(edge.from_end, out.opposite(), opts)
+            && path.len() > 1
+        {
+            canvas.set_glyph(path[0].0, path[0].1, glyph);
         }
         if let Some(label) = &edge.label
             && !place_label(&mut canvas, &path, label)

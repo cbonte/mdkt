@@ -37,9 +37,9 @@ soft-break modes.
 Supported: headings, paragraphs, emphasis, strong, strikethrough, inline code, block quotes,
 GitHub alerts, ordered and unordered lists, task lists, fenced and indented code blocks, GFM
 tables, thematic breaks, hard breaks, links, images (alt text and URL), footnotes, Mermaid
-flowcharts, sequence diagrams and pie charts.
+flowcharts, sequence diagrams, state diagrams and pie charts.
 
-A `mermaid` code block holding a `graph`, a `flowchart`, a `sequenceDiagram` or a `pie` is drawn with box
+A `mermaid` code block holding a `graph`, a `flowchart`, a `sequenceDiagram`, a `stateDiagram` or a `pie` is drawn with box
 characters, in the same repertoire as table borders. A diagram that is not drawn is shown as a
 plain code block: another diagram type, syntax outside the supported set, or a drawing wider than
 the line.
@@ -53,6 +53,10 @@ not drawn.
 Sequence diagrams: `participant` and `actor` declarations, messages `->>`, `-->>`, `->`, `-->`,
 `-)`, `--)`, notes `left of`, `right of` and `over`, and `autonumber`. Blocks (`loop`, `alt`,
 `opt`, `par`, ...), a message to oneself and the cross arrows `-x` are not drawn.
+
+State diagrams: transitions `A --> B` with an optional `: label`, the pseudo-state `[*]` as start
+and end, `state "Name" as id`, `id : description` and `direction`. Composite states, forks,
+choices, notes and concurrency are not drawn.
 
 Pie charts: an optional `showData` and `title`, and one `"label" : value` line per slice. Each
 slice is a bar scaled to the largest one, with its share and, with `showData`, its value.

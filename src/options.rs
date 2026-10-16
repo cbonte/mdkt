@@ -49,6 +49,9 @@ pub struct Glyphs {
     pub dotted: [char; 2],
     /// One cell of a chart bar.
     pub bar: char,
+    /// Initial and final pseudo-states of a state diagram.
+    pub start_state: String,
+    pub end_state: String,
     pub task_done: String,
     pub task_todo: String,
 }
@@ -67,6 +70,8 @@ impl Glyphs {
             thick: THICK_BORDERS,
             dotted: ['\u{2504}', '\u{2506}'],
             bar: '\u{2588}',
+            start_state: "\u{25cf}".into(),
+            end_state: "\u{25c9}".into(),
             task_done: "[\u{2713}] ".into(),
             task_todo: "[ ] ".into(),
         }
@@ -85,6 +90,8 @@ impl Glyphs {
             thick: ASCII_THICK_BORDERS,
             dotted: ['.', ':'],
             bar: '#',
+            start_state: "*".into(),
+            end_state: "(*)".into(),
             task_done: "[x] ".into(),
             task_todo: "[ ] ".into(),
         }

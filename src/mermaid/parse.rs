@@ -1,54 +1,7 @@
 //! Flowchart syntax: header, nodes and edges.
 
-use std::collections::HashMap;
-
-use super::canvas::{Dir, Weight};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Direction {
-    TopDown,
-    BottomUp,
-    LeftRight,
-    RightLeft,
-}
-
-impl Direction {
-    pub fn parse(token: &str) -> Option<Direction> {
-        match token {
-            "TD" | "TB" => Some(Direction::TopDown),
-            "BT" => Some(Direction::BottomUp),
-            "LR" => Some(Direction::LeftRight),
-            "RL" => Some(Direction::RightLeft),
-            _ => None,
-        }
-    }
-
-    pub fn horizontal(self) -> bool {
-        matches!(self, Direction::LeftRight | Direction::RightLeft)
-    }
-
-    /// Direction in which edges between layers leave a node.
-    pub fn flow(self) -> Dir {
-        match self {
-            Direction::TopDown => Dir::S,
-            Direction::BottomUp => Dir::N,
-            Direction::LeftRight => Dir::E,
-            Direction::RightLeft => Dir::W,
-        }
-    }
-
-    /// Side used by edges that go back to an earlier layer.
-    pub fn side(self) -> Dir {
-        if self.horizontal() { Dir::S } else { Dir::E }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Shape {
-    Rect,
-    Round,
-    Diamond,
-}
+use super::canvas::Weight;
+use super::graph::{Builder, Direction, Edge, Flow, Head, Node, Shape};
 
 /// Opening and closing delimiters of the node shapes, longest opening first.
 const SHAPES: [(&str, &str, Shape); 9] = [
@@ -62,28 +15,6 @@ const SHAPES: [(&str, &str, Shape); 9] = [
     ("{", "}", Shape::Diamond),
     (">", "]", Shape::Rect),
 ];
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Node {
-    pub lines: Vec<String>,
-    pub shape: Shape,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Edge {
-    pub from: usize,
-    pub to: usize,
-    pub arrow: bool,
-    pub weight: Weight,
-    pub label: Option<String>,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Flow {
-    pub direction: Direction,
-    pub nodes: Vec<Node>,
-    pub edges: Vec<Edge>,
-}
 
 /// Parses a `graph` or `flowchart` block. `None` for another diagram type and for syntax that is
 /// not drawn.
@@ -103,12 +34,7 @@ pub fn parse(src: &str) -> Option<Flow> {
     if header.next().is_some() {
         return None;
     }
-    let mut flow = Flow {
-        direction,
-        nodes: Vec::new(),
-        edges: Vec::new(),
-    };
-    let mut ids: HashMap<String, usize> = HashMap::new();
+    let mut builder = Builder::new(direction);
     for line in lines {
         for statement in line.split(';').map(str::trim).filter(|s| !s.is_empty()) {
             let word = statement.split_whitespace().next().unwrap_or("");
@@ -117,23 +43,24 @@ pub fn parse(src: &str) -> Option<Flow> {
                 "subgraph" | "end" | "direction" => return None,
                 _ => {}
             }
-            parse_statement(statement, &mut flow, &mut ids)?;
+            parse_statement(statement, &mut builder)?;
         }
     }
-    Some(flow)
+    Some(builder.flow)
 }
 
 /// One chain such as `A[Start] --> B --> C`.
-fn parse_statement(s: &str, flow: &mut Flow, ids: &mut HashMap<String, usize>) -> Option<()> {
+fn parse_statement(s: &str, b: &mut Builder) -> Option<()> {
     let mut rest = s;
     let mut pending: Option<(usize, Link)> = None;
     loop {
-        let (node, after) = parse_node(rest, flow, ids)?;
+        let (node, after) = parse_node(rest, b)?;
         if let Some((from, link)) = pending.take() {
-            flow.edges.push(Edge {
+            b.flow.edges.push(Edge {
                 from,
                 to: node,
-                arrow: link.arrow,
+                from_end: Head::None,
+                to_end: if link.arrow { Head::Arrow } else { Head::None },
                 weight: link.weight,
                 label: link.label,
             });
@@ -148,11 +75,7 @@ fn parse_statement(s: &str, flow: &mut Flow, ids: &mut HashMap<String, usize>) -
     }
 }
 
-fn parse_node<'a>(
-    s: &'a str,
-    flow: &mut Flow,
-    ids: &mut HashMap<String, usize>,
-) -> Option<(usize, &'a str)> {
+fn parse_node<'a>(s: &'a str, b: &mut Builder) -> Option<(usize, &'a str)> {
     let end = s
         .find(|c: char| !(c.is_alphanumeric() || c == '_'))
         .unwrap_or(s.len());
@@ -169,15 +92,13 @@ fn parse_node<'a>(
             break;
         }
     }
-    let index = *ids.entry(id.to_string()).or_insert_with(|| {
-        flow.nodes.push(Node {
-            lines: vec![id.to_string()],
-            shape: Shape::Rect,
-        });
-        flow.nodes.len() - 1
-    });
+    let index = b.node(id);
     if let Some((lines, shape)) = shaped.filter(|(lines, _)| !lines.is_empty()) {
-        flow.nodes[index] = Node { lines, shape };
+        b.flow.nodes[index] = Node {
+            lines,
+            dividers: Vec::new(),
+            shape,
+        };
     }
     Some((index, rest))
 }
@@ -304,7 +225,7 @@ mod tests {
         assert_eq!(flow.nodes[0].lines, ["Start"]);
         assert_eq!(flow.nodes[1].lines, ["B"]);
         assert_eq!(flow.edges.len(), 3);
-        assert!(flow.edges[0].arrow && !flow.edges[1].arrow);
+        assert!(flow.edges[0].to_end == Head::Arrow && flow.edges[1].to_end == Head::None);
     }
 
     #[test]
@@ -314,7 +235,7 @@ mod tests {
         let edges: Vec<_> = flow
             .edges
             .iter()
-            .map(|e| (e.arrow, e.weight, e.label.as_deref()))
+            .map(|e| (e.to_end == Head::Arrow, e.weight, e.label.as_deref()))
             .collect();
         assert_eq!(
             edges,

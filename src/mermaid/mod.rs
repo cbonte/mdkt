@@ -2,10 +2,12 @@
 
 mod canvas;
 mod flow;
+mod graph;
 mod parse;
 mod pie;
 mod route;
 mod sequence;
+mod state;
 
 use crate::model::Line;
 use crate::options::RenderOptions;
@@ -23,6 +25,9 @@ pub fn render(code: &str, width: usize, opts: &RenderOptions) -> Option<Vec<Line
     if first.split_whitespace().next() == Some("pie") {
         return pie::render(code, width, opts);
     }
-    let flow = parse::parse(code)?;
+    let flow = match first.split_whitespace().next() {
+        Some("stateDiagram" | "stateDiagram-v2") => state::parse(code)?,
+        _ => parse::parse(code)?,
+    };
     flow::draw(&flow, width, opts)
 }
