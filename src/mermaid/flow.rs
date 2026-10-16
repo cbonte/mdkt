@@ -435,15 +435,13 @@ pub fn draw(flow: &Flow, width: usize, opts: &RenderOptions) -> Option<Vec<Line>
     let gaps = gaps(flow, &back, &rank, layers.len());
     let texts: Vec<Vec<String>> = flow.nodes.iter().map(|n| node_text(n, opts)).collect();
     let (placed, w, h) = place(flow, &texts, &layers, &gaps);
-    // Labels of the edges going back are written beside the column that routes around the layout.
+    // In a vertical flow a label is written beside its edge and may run past the layout.
     let room = if flow.direction.horizontal() {
         0
     } else {
         flow.edges
             .iter()
-            .zip(&back)
-            .filter(|(_, back)| **back)
-            .filter_map(|(edge, _)| edge.label.as_ref())
+            .filter_map(|edge| edge.label.as_ref())
             .map(|label| display_width(label) + 3)
             .max()
             .unwrap_or(0)
