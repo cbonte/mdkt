@@ -36,15 +36,22 @@ soft-break modes.
 Supported: headings, paragraphs, emphasis, strong, strikethrough, inline code, block quotes,
 GitHub alerts, ordered and unordered lists, task lists, fenced and indented code blocks, GFM
 tables, thematic breaks, hard breaks, links, images (alt text and URL), footnotes, Mermaid
-flowcharts.
+flowcharts and sequence diagrams.
 
-A `mermaid` code block holding a `graph` or `flowchart` is drawn with box characters, in the
-same repertoire as table borders. Nodes may be rectangles `[text]`, rounded `(text)`, `([text])`,
-`((text))` or diamonds `{text}`; `<br/>` in a label starts a new line. Styling lines (`style`,
-`classDef`, `class`, `linkStyle`, `click`) are ignored. Edges may be `-->`, `---`, dotted `-.->`,
-`-.-` or thick `==>`, `===`, with a label as `-->|text|` or `-- text -->`. A diagram that is not drawn is shown as a plain code block:
-another diagram type, a node shape or edge syntax outside the supported set, a subgraph, a node
-linked to itself, or a drawing wider than the line.
+A `mermaid` code block holding a `graph`, a `flowchart` or a `sequenceDiagram` is drawn with box
+characters, in the same repertoire as table borders. A diagram that is not drawn is shown as a
+plain code block: another diagram type, syntax outside the supported set, or a drawing wider than
+the line.
+
+Flowcharts: nodes may be rectangles `[text]`, rounded `(text)`, `([text])`, `((text))` or diamonds
+`{text}`; `<br/>` in a label starts a new line. Edges may be `-->`, `---`, dotted `-.->`, `-.-` or
+thick `==>`, `===`, with a label as `-->|text|` or `-- text -->`. Styling lines (`style`,
+`classDef`, `class`, `linkStyle`, `click`) are ignored. Subgraphs and a node linked to itself are
+not drawn.
+
+Sequence diagrams: `participant` and `actor` declarations, messages `->>`, `-->>`, `->`, `-->`,
+`-)`, `--)`, notes `left of`, `right of` and `over`, and `autonumber`. Blocks (`loop`, `alt`,
+`opt`, `par`, ...), a message to oneself and the cross arrows `-x` are not drawn.
 
 Footnote references are numbered in order of first appearance; the bodies are printed as a
 numbered list under a rule at the end of the document.

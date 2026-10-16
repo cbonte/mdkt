@@ -159,6 +159,15 @@ impl Canvas {
         col - x
     }
 
+    /// Empties a rectangle of cells.
+    pub fn clear_rect(&mut self, x: usize, y: usize, w: usize, h: usize) {
+        for cy in y..(y + h).min(self.h) {
+            for cx in x..(x + w).min(self.w) {
+                self.cells[cy * self.w + cx] = Cell::Empty;
+            }
+        }
+    }
+
     /// Draws a rectangle border of `w` by `h` cells, at least 2 by 2.
     pub fn draw_box(&mut self, x: usize, y: usize, w: usize, h: usize) {
         for cx in x + 1..x + w - 1 {

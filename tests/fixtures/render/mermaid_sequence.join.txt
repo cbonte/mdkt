@@ -1,0 +1,26 @@
+Messages and a note:
+
+  +-----+  +-----+
+  | Cli |  | Srv |
+  +--+--+  +--+--+
+     :        :
+     :  GET   :
+     +------->:
+     :        :
+     :        : +--------+
+     :        : | cached |
+     :        : +--------+
+     :        :
+     :  200   :
+     :<.......+
+     :        :
+  +--+--+  +--+--+
+  | Cli |  | Srv |
+  +-----+  +-----+
+
+Not drawn (loop):
+
+  sequenceDiagram
+    loop every minute
+      A->>B: ping
+    end
