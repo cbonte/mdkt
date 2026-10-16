@@ -80,6 +80,10 @@ pub struct Args {
     #[arg(long)]
     pub no_heading_marker: bool,
 
+    /// Show Mermaid blocks as code instead of drawing them.
+    #[arg(long)]
+    pub no_diagrams: bool,
+
     /// YAML or TOML metadata block at the top of the document.
     #[arg(long, value_enum, default_value_t)]
     pub front_matter: FrontMatter,
@@ -146,6 +150,7 @@ pub fn resolve(cli: &Args, probe: &Probe) -> RenderOptions {
         tab_width: cli.tab_width,
         table_overflow: cli.table_overflow,
         heading_marker: !cli.no_heading_marker,
+        diagrams: !cli.no_diagrams,
         front_matter: cli.front_matter,
         ..RenderOptions::default()
     }
@@ -235,6 +240,12 @@ mod tests {
             resolve(&cli(&["--front-matter", "show"]), &probe(true)).front_matter,
             FrontMatter::Show
         );
+    }
+
+    #[test]
+    fn diagrams_drawn_unless_disabled() {
+        assert!(resolve(&cli(&[]), &probe(true)).diagrams);
+        assert!(!resolve(&cli(&["--no-diagrams"]), &probe(true)).diagrams);
     }
 
     #[test]

@@ -252,7 +252,7 @@ impl<'a, W: Write> Renderer<'a, W> {
 
     fn render_code(&mut self, lang: Option<&str>, code: &str) -> io::Result<()> {
         let diagram = match lang {
-            Some("mermaid") => {
+            Some("mermaid") if self.opts.diagrams => {
                 let width = self.available_width().saturating_sub(self.opts.code_indent);
                 mermaid::render(code, width, self.opts)
             }

@@ -6,6 +6,7 @@
 - cat: draw Mermaid rounded and diamond nodes and multi-line labels.
 - cat: draw Mermaid edge labels and dotted and thick edges.
 - cat: draw Mermaid sequence diagrams as text.
+- cat: show Mermaid blocks as code on request.
 
 # 0.1.0 - 2026-10-16
 

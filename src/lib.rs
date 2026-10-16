@@ -162,6 +162,19 @@ mod tests {
     use options::FrontMatter;
 
     #[test]
+    fn mermaid_drawn_unless_disabled() {
+        let md = "```mermaid\ngraph LR\n  A --> B\n```\n";
+        let mut opts = RenderOptions::plain(40);
+        let drawn = render_to_string(md, &opts).unwrap();
+        assert!(drawn.contains("| A +"), "{drawn}");
+        opts.diagrams = false;
+        assert_eq!(
+            render_to_string(md, &opts).unwrap(),
+            "  graph LR\n    A --> B\n"
+        );
+    }
+
+    #[test]
     fn front_matter_shown_on_request() {
         let mut opts = RenderOptions::plain(40);
         assert_eq!(

@@ -121,6 +121,8 @@ pub struct RenderOptions {
     pub table_overflow: TableOverflow,
     /// Show `#` markers before heading text.
     pub heading_marker: bool,
+    /// Draw `mermaid` code blocks as diagrams.
+    pub diagrams: bool,
     pub front_matter: FrontMatter,
 }
 
@@ -141,6 +143,7 @@ impl RenderOptions {
             table_padding: defaults::TABLE_PADDING,
             table_overflow: TableOverflow::Wrap,
             heading_marker: true,
+            diagrams: true,
             front_matter: FrontMatter::Hide,
         }
     }
