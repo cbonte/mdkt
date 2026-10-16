@@ -35,7 +35,13 @@ soft-break modes.
 
 Supported: headings, paragraphs, emphasis, strong, strikethrough, inline code, block quotes,
 GitHub alerts, ordered and unordered lists, task lists, fenced and indented code blocks, GFM
-tables, thematic breaks, hard breaks, links, images (alt text and URL), footnotes.
+tables, thematic breaks, hard breaks, links, images (alt text and URL), footnotes, Mermaid
+flowcharts.
+
+A `mermaid` code block holding a `graph` or `flowchart` is drawn with box characters, in the
+same repertoire as table borders. A diagram that is not drawn is shown as a plain code block:
+another diagram type, a node shape or edge syntax outside the supported set, a subgraph, a node
+linked to itself, or a drawing wider than the line.
 
 Footnote references are numbered in order of first appearance; the bodies are printed as a
 numbered list under a rule at the end of the document.

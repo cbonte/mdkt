@@ -6,6 +6,7 @@ pub mod cmd;
 pub mod highlight;
 pub mod html;
 pub mod layout;
+pub mod mermaid;
 pub mod model;
 pub mod options;
 pub mod pager;

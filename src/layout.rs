@@ -4,6 +4,7 @@ use std::io::{self, Write};
 
 use crate::ansi::AnsiWriter;
 use crate::highlight::{Highlighter, plain_lines};
+use crate::mermaid;
 use crate::model::{AlertKind, Block, InlineText, Line, ListItem, Segment};
 use crate::options::{FrontMatter, RenderOptions};
 use crate::style::Style;
@@ -250,10 +251,22 @@ impl<'a, W: Write> Renderer<'a, W> {
     }
 
     fn render_code(&mut self, lang: Option<&str>, code: &str) -> io::Result<()> {
-        let code = self.expand_tabs(code);
-        let lines = match self.hl {
-            Some(hl) => hl.highlight(lang, &code),
-            None => plain_lines(&code, self.opts.theme.code_block),
+        let diagram = match lang {
+            Some("mermaid") => {
+                let width = self.available_width().saturating_sub(self.opts.code_indent);
+                mermaid::render(code, width, self.opts)
+            }
+            _ => None,
+        };
+        let lines = match diagram {
+            Some(lines) => lines,
+            None => {
+                let code = self.expand_tabs(code);
+                match self.hl {
+                    Some(hl) => hl.highlight(lang, &code),
+                    None => plain_lines(&code, self.opts.theme.code_block),
+                }
+            }
         };
         let indent = " ".repeat(self.opts.code_indent);
         let prefix = Prefix::same(vec![Segment::new(indent, Style::PLAIN)]);

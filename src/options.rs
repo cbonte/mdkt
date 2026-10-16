@@ -39,6 +39,8 @@ pub struct Glyphs {
     pub rule: char,
     pub borders: Borders,
     pub ellipsis: String,
+    /// Arrow heads pointing north, east, south and west.
+    pub arrows: [char; 4],
     pub task_done: String,
     pub task_todo: String,
 }
@@ -51,6 +53,7 @@ impl Glyphs {
             rule: '\u{2500}',
             borders: UNICODE_BORDERS,
             ellipsis: "\u{2026}".into(),
+            arrows: ['\u{25b2}', '\u{25ba}', '\u{25bc}', '\u{25c4}'],
             task_done: "[\u{2713}] ".into(),
             task_todo: "[ ] ".into(),
         }
@@ -63,6 +66,7 @@ impl Glyphs {
             rule: '-',
             borders: ASCII_BORDERS,
             ellipsis: "...".into(),
+            arrows: ['^', '>', 'v', '<'],
             task_done: "[x] ".into(),
             task_todo: "[ ] ".into(),
         }

@@ -1,3 +1,9 @@
+# Unreleased
+
+## Added
+
+- cat: draw Mermaid flowcharts as text.
+
 # 0.1.0 - 2026-10-16
 
 ## Added
