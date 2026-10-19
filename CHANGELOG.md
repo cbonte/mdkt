@@ -1,4 +1,4 @@
-# Changelog
+# 0.1.0 - 2026-10-16
 
 ## Added
 
@@ -17,7 +17,7 @@
 - cat: render one section chosen by its heading text or its anchor.
 - toc: insert or refresh a table of contents between two HTML comment markers.
 - toc: report the files whose table of contents is stale.
-- Syntax tree: keep the byte range of every construct.
+- tree: keep the byte range of every construct.
 - lint: report relative links and images that point to a missing file.
 - lint: report anchors that match no heading in the file or in the linked one.
 - lint: report skipped heading levels and duplicate headings.
