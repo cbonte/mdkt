@@ -27,11 +27,17 @@ pub fn render(code: &str, width: usize, opts: &RenderOptions) -> Option<Vec<Line
     if first.split_whitespace().next() == Some("pie") {
         return pie::render(code, width, opts);
     }
-    let flow = match first.split_whitespace().next() {
+    let mut flow = match first.split_whitespace().next() {
         Some("stateDiagram" | "stateDiagram-v2") => state::parse(code)?,
         Some("classDiagram" | "classDiagram-v2") => class::parse(code)?,
         Some("erDiagram") => er::parse(code)?,
         _ => parse::parse(code)?,
     };
-    flow::draw(&flow, width, opts)
+    let drawn = flow::draw(&flow, width, opts);
+    if drawn.is_none() && flow.direction.horizontal() {
+        // A left-to-right layout too wide for the terminal is stacked top-down instead.
+        flow.direction = graph::Direction::TopDown;
+        return flow::draw(&flow, width, opts);
+    }
+    drawn
 }

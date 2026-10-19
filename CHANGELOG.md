@@ -11,6 +11,7 @@
 - cat: draw Mermaid state diagrams as text.
 - cat: draw Mermaid class diagrams as text.
 - cat: draw Mermaid entity-relationship diagrams as text.
+- cat: stack a Mermaid flowchart top-down when left-to-right is too wide.
 
 # 0.1.0 - 2026-10-16
 

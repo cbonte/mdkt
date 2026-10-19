@@ -42,7 +42,7 @@ flowcharts, sequence diagrams, state diagrams, class diagrams, entity-relationsh
 A `mermaid` code block holding a `graph`, a `flowchart`, a `sequenceDiagram`, a `stateDiagram`, a `classDiagram`, an `erDiagram` or a `pie` is drawn with box
 characters, in the same repertoire as table borders. A diagram that is not drawn is shown as a
 plain code block: another diagram type, syntax outside the supported set, or a drawing wider than
-the line.
+the line. A left-to-right flowchart too wide for the line is stacked top-down first.
 
 Flowcharts: nodes may be rectangles `[text]`, rounded `(text)`, `([text])`, `((text))` or diamonds
 `{text}`; `<br/>` in a label starts a new line. Edges may be `-->`, `---`, dotted `-.->`, `-.-` or

@@ -162,6 +162,14 @@ mod tests {
     use options::FrontMatter;
 
     #[test]
+    fn wide_left_to_right_flowchart_is_stacked() {
+        let md = "```mermaid\nflowchart LR\n  A[\"first long label\"] --> B[\"second long label\"]\n```\n";
+        let drawn = render_to_string(md, &RenderOptions::plain(30)).unwrap();
+        assert!(drawn.contains("| first long label |"), "{drawn}");
+        assert!(drawn.contains("| second long label |"), "{drawn}");
+    }
+
+    #[test]
     fn mermaid_drawn_unless_disabled() {
         let md = "```mermaid\ngraph LR\n  A --> B\n```\n";
         let mut opts = RenderOptions::plain(40);
