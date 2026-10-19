@@ -1,7 +1,7 @@
 //! GFM table layout: column measurement, width distribution and border drawing.
 
 use crate::model::{Align, Atom, InlineText, Line, Segment, Table};
-use crate::options::{RenderOptions, TableOverflow};
+use crate::options::{RenderOptions, TableOverflow, TableRules};
 use crate::style::Style;
 use crate::wrap::{SoftBreaks, WrapOptions, segments_width, truncate_line, wrap};
 
@@ -294,8 +294,19 @@ pub fn render(table: &Table, available: usize, opts: &RenderOptions) -> Vec<Line
         out.extend(frame.row(&layout_row(&table.head), &align, opts.theme.table_header));
         out.push(frame.rule(b.mid_left, b.cross, b.mid_right));
     }
-    for row in &table.rows {
-        out.extend(frame.row(&layout_row(row), &align, Style::PLAIN));
+    let body: Vec<Vec<Vec<Line>>> = table.rows.iter().map(|r| layout_row(r)).collect();
+    let multi_line = body.iter().any(|cells| cells.iter().any(|c| c.len() > 1));
+    for (i, cells) in body.iter().enumerate() {
+        if i > 0 {
+            match opts.table_rules {
+                TableRules::Always => out.push(frame.rule(b.mid_left, b.cross, b.mid_right)),
+                TableRules::Never if multi_line => {
+                    out.extend(frame.row(&[], &align, Style::PLAIN));
+                }
+                TableRules::Never => {}
+            }
+        }
+        out.extend(frame.row(cells, &align, Style::PLAIN));
     }
     out.push(frame.rule(b.bottom_left, b.bottom_mid, b.bottom_right));
     out

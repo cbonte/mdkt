@@ -31,6 +31,14 @@ pub enum TableOverflow {
     Truncate,
 }
 
+/// Whether a rule is drawn between table body rows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, clap::ValueEnum)]
+pub enum TableRules {
+    #[default]
+    Always,
+    Never,
+}
+
 /// Decorative strings, one set per character repertoire.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Glyphs {
@@ -140,6 +148,7 @@ pub struct RenderOptions {
     pub min_content_width: usize,
     pub table_padding: usize,
     pub table_overflow: TableOverflow,
+    pub table_rules: TableRules,
     /// Show `#` markers before heading text.
     pub heading_marker: bool,
     /// Draw `mermaid` code blocks as diagrams.
@@ -163,6 +172,7 @@ impl RenderOptions {
             min_content_width: defaults::MIN_CONTENT_WIDTH,
             table_padding: defaults::TABLE_PADDING,
             table_overflow: TableOverflow::Wrap,
+            table_rules: TableRules::Always,
             heading_marker: true,
             diagrams: true,
             front_matter: FrontMatter::Hide,

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use clap::{Args as ClapArgs, ValueEnum};
 
-use crate::options::{FrontMatter, Glyphs, LinkMode, RenderOptions, TableOverflow, defaults};
+use crate::options::{FrontMatter, Glyphs, LinkMode, RenderOptions, TableOverflow, TableRules, defaults};
 use crate::style::ColorLevel;
 use crate::term::Probe;
 use crate::wrap::SoftBreaks;
@@ -75,6 +75,10 @@ pub struct Args {
     /// Table cells wider than their column.
     #[arg(long, value_enum, default_value_t)]
     pub table_overflow: TableOverflow,
+
+    /// Rules between table rows; without them, multi-line rows are separated by a blank line.
+    #[arg(long, value_enum, default_value_t)]
+    pub table_rules: TableRules,
 
     /// Hide the `#` markers before headings.
     #[arg(long)]
@@ -149,6 +153,7 @@ pub fn resolve(cli: &Args, probe: &Probe) -> RenderOptions {
         glyphs,
         tab_width: cli.tab_width,
         table_overflow: cli.table_overflow,
+        table_rules: cli.table_rules,
         heading_marker: !cli.no_heading_marker,
         diagrams: !cli.no_diagrams,
         front_matter: cli.front_matter,
